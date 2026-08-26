@@ -15,10 +15,13 @@
     "format": "prettier --check \"src/**/*.ts\"",
     "format:fix": "prettier --write \"src/**/*.ts\"",
     "discover": "tsx src/scripts/discover-markets.ts",
+    "discover:ec": "tsx src/scripts/discover-event-contracts.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "@dreamdex-bot-kit/core": "file:vendor/dreamdex-bot-kit/packages/core",
+    "@dreamdex-bot-kit/ec-core": "file:vendor/dreamdex-bot-kit/packages/ec-core",
+    "@somnia-chain/markets-sdk": "^0.28.1",
     "dotenv": "^16.4.5",
     "viem": "^2.21.0",
     "ws": "^8.18.0"

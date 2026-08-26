@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.cache/
+*.tsbuildinfo
+package-lock.json
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+!.env.railway
+*.key
+keystore.json
+.state/
+logs/
+artifacts/
+
+# vendor — local clone, not committed (re-clone via git clone https://github.com/somnia-chain/dreamdex-bot-kit.git vendor/dreamdex-bot-kit)
+vendor/
+!vendor/.gitkeep
+
+# OS
+.DS_Store

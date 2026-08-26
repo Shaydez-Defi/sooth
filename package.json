@@ -1,0 +1,39 @@
+{
+  "name": "dreamdex-trading-intelligence-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DreamDEX Trading Intelligence Backend — Somnia testnet",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --check \"src/**/*.ts\"",
+    "format:fix": "prettier --write \"src/**/*.ts\"",
+    "discover": "tsx src/scripts/discover-markets.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dreamdex-bot-kit/core": "file:vendor/dreamdex-bot-kit/packages/core",
+    "dotenv": "^16.4.5",
+    "viem": "^2.21.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^2.1.6"
+  }
+}

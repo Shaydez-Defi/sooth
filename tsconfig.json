@@ -1,0 +1,10 @@
+{
+  "extends": "./vendor/dreamdex-bot-kit/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "vendor"]
+}

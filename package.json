@@ -18,6 +18,7 @@
     "discover:ec": "tsx src/scripts/discover-event-contracts.ts",
     "stage2": "tsx src/scripts/stage2-place-cancel.ts",
     "analyze": "tsx src/scripts/analyze-markets.ts",
+    "backtest": "tsx src/scripts/backtest.ts",
     "test": "vitest run"
   },
   "dependencies": {

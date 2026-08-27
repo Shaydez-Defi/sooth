@@ -70,6 +70,27 @@ function validatePrivateKey(raw: string | undefined): string | undefined {
   return trimmed;
 }
 
+/**
+ * ANALYSIS — thresholds for Market Intelligence Engine (all in src/config.ts per brief, no inline magic numbers).
+ * Depth window: top N levels of YES book (bid/ask quantity sum). See src/analysis/engine.ts for formula.
+ */
+export const ANALYSIS_CONFIG = {
+  /** Depth window: top N levels per side to compute imbalance/liquidity. */
+  DEPTH_LEVELS: 3,
+  /** Max nudge: k in estimatedProbability = clamp(marketProbability + k*imbalance, 0.01,0.99). Small tilt, not independent prediction. */
+  K_IMBALANCE_NUDGE: 0.06,
+  /** Minimum absolute edge to recommend TRADE (probability points). */
+  MIN_EDGE: 0.02,
+  /** Minimum liquidity (sum of bid+ask quantities in depth window, shares) to recommend TRADE. */
+  MIN_LIQUIDITY: 100,
+  /** Maximum spread (probability points, e.g. 0.05 = 5% points) to recommend TRADE. */
+  MAX_SPREAD: 0.06,
+  /** Maximum spread in bps (derived check, 600 bps = 6%). */
+  MAX_SPREAD_BPS: 600,
+  /** Minimum seconds remaining to expiry to recommend TRADE (buffer). */
+  MIN_TIME_REMAINING: 300,
+} as const;
+
 export function loadConfig(): AppConfig {
   // SOMNIA_TESTNET_RPC_URL / RPC_URL fallback, DREAMDEX_API_BASE / REST_API_URL fallback, CHAIN_ID, NETWORK
   const somniaRpcUrl =

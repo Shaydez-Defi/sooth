@@ -102,6 +102,11 @@ export function initDb(db: Database.Database): void {
       orderId TEXT,
       quantityFilled REAL,
       fillPrice REAL,
+      edgeAtDecision REAL,
+      midAtDecision REAL,
+      gasUsed TEXT,
+      gasPrice TEXT,
+      gasCost REAL,
       rawData TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_bot_fills_market ON bot_fills(marketId);
@@ -121,6 +126,14 @@ export function initDb(db: Database.Database): void {
       updatedAtUnix INTEGER NOT NULL
     );
   `);
+  // Migration for existing bot_fills without new edge/gas columns (stage 7)
+  for (const col of ["edgeAtDecision REAL", "midAtDecision REAL", "gasUsed TEXT", "gasPrice TEXT", "gasCost REAL"]) {
+    try {
+      db.exec(`ALTER TABLE bot_fills ADD COLUMN ${col}`);
+    } catch {
+      // column already exists — ignore
+    }
+  }
 }
 
 /** Insert one snapshot row. Returns inserted row id. */
@@ -216,18 +229,37 @@ export interface BotFillRow {
   readonly orderId: string | null;
   readonly quantityFilled: number | null;
   readonly fillPrice: number | null;
+  readonly edgeAtDecision: number | null;
+  readonly midAtDecision: number | null;
+  readonly gasUsed: string | null;
+  readonly gasPrice: string | null;
+  readonly gasCost: number | null;
   readonly rawData: string | null;
 }
 
 export function insertBotFill(
   db: Database.Database,
-  params: { txHash: string; blockNumber: number; marketId: string; symbol: string; orderId?: string | null; quantityFilled?: number | null; fillPrice?: number | null; rawData?: unknown },
+  params: {
+    txHash: string;
+    blockNumber: number;
+    marketId: string;
+    symbol: string;
+    orderId?: string | null;
+    quantityFilled?: number | null;
+    fillPrice?: number | null;
+    edgeAtDecision?: number | null;
+    midAtDecision?: number | null;
+    gasUsed?: string | null;
+    gasPrice?: string | null;
+    gasCost?: number | null;
+    rawData?: unknown;
+  },
 ): number {
   const nowUnix = Math.floor(Date.now() / 1000);
   const nowIso = new Date().toISOString();
   const stmt = db.prepare(`
-    INSERT INTO bot_fills (capturedAtUnix, capturedAtIso, txHash, blockNumber, marketId, symbol, orderId, quantityFilled, fillPrice, rawData)
-    VALUES (@capturedAtUnix, @capturedAtIso, @txHash, @blockNumber, @marketId, @symbol, @orderId, @quantityFilled, @fillPrice, @rawData)
+    INSERT INTO bot_fills (capturedAtUnix, capturedAtIso, txHash, blockNumber, marketId, symbol, orderId, quantityFilled, fillPrice, edgeAtDecision, midAtDecision, gasUsed, gasPrice, gasCost, rawData)
+    VALUES (@capturedAtUnix, @capturedAtIso, @txHash, @blockNumber, @marketId, @symbol, @orderId, @quantityFilled, @fillPrice, @edgeAtDecision, @midAtDecision, @gasUsed, @gasPrice, @gasCost, @rawData)
   `);
   const info = stmt.run({
     capturedAtUnix: nowUnix,
@@ -239,9 +271,18 @@ export function insertBotFill(
     orderId: params.orderId ?? null,
     quantityFilled: params.quantityFilled ?? null,
     fillPrice: params.fillPrice ?? null,
+    edgeAtDecision: params.edgeAtDecision ?? null,
+    midAtDecision: params.midAtDecision ?? null,
+    gasUsed: params.gasUsed ?? null,
+    gasPrice: params.gasPrice ?? null,
+    gasCost: params.gasCost ?? null,
     rawData: params.rawData ? JSON.stringify(params.rawData) : null,
   });
   return Number(info.lastInsertRowid);
+}
+
+export function listBotFills(db: Database.Database, limit = 100): BotFillRow[] {
+  return db.prepare("SELECT * FROM bot_fills ORDER BY capturedAtUnix DESC, id DESC LIMIT ?").all(limit) as BotFillRow[];
 }
 
 export interface BotPositionRow {

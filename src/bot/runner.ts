@@ -50,6 +50,7 @@ export class BotRunner {
   private orderState = createOrderState();
   private stopping = false;
   private ecFactory: ((withSigner: boolean) => EcContext) | null = null;
+  private pendingOrderMeta = new Map<string, { edgeAtDecision: number; midAtDecision: number | null; gasUsed: string | null; gasPrice: string | null }>();
 
   constructor(opts: RunnerOptions & { ecFactory?: (withSigner: boolean) => EcContext } = {}) {
     const dbPath = opts.dbPath ?? SNAPSHOT_CONFIG.DB_PATH;
@@ -391,11 +392,20 @@ export class BotRunner {
 
       if (pipelineResult.executed && pipelineResult.placeResult) {
         const pr = pipelineResult.placeResult;
+        // Capture edge/mid/gas at decision time for later analytics (fill will join on orderId)
+        if (pr.orderId !== undefined && pr.orderId !== null) {
+          this.pendingOrderMeta.set(String(pr.orderId), {
+            edgeAtDecision: analysis.edge,
+            midAtDecision: mid,
+            gasUsed: String(pr.gasUsed ?? ""),
+            gasPrice: null,
+          });
+        }
         logEvent(this.db, {
           marketId,
           symbol,
           eventType: "EXECUTION",
-          data: { executed: true, txHash: pr.txHash, blockNumber: String(pr.blockNumber), orderId: String(pr.orderId ?? ""), price: pr.price, size: pr.size },
+          data: { executed: true, txHash: pr.txHash, blockNumber: String(pr.blockNumber), orderId: String(pr.orderId ?? ""), price: pr.price, size: pr.size, edgeAtDecision: analysis.edge, midAtDecision: mid, gasUsed: String(pr.gasUsed ?? "") },
           blockNumber: Number(pr.blockNumber),
         });
         console.log(`[BOT] tick #${this.tickCount} ${symbol} PLACED orderId=${String(pr.orderId ?? "?")} tx=${String(pr.txHash).slice(0, 18)}... block=${String(pr.blockNumber)}`);
@@ -513,9 +523,34 @@ export class BotRunner {
           const args = (l as unknown as { args?: { quantityFilled?: bigint; fillPrice?: bigint; takerOrderId?: bigint; makerOrderId?: bigint } }).args;
           const qty = args?.quantityFilled !== undefined ? Number(args.quantityFilled) / 1_000_000 : 1; // tUSDC 6dp approx
           const price = args?.fillPrice !== undefined ? Number(args.fillPrice) / 1_000_000 : null;
-          insertBotFill(this.db, { txHash, blockNumber, marketId, symbol, orderId: String(args?.takerOrderId ?? ""), quantityFilled: qty, fillPrice: price, rawData: l });
-          logEvent(this.db, { marketId, symbol, eventType: "FILL_OBSERVED", data: { txHash, blockNumber, args, qty, price }, blockNumber });
+          const pending = this.pendingOrderMeta.get(String(args?.makerOrderId ?? "")) ?? this.pendingOrderMeta.get(String(args?.takerOrderId ?? ""));
+          const edgeAtDecision = pending?.edgeAtDecision ?? null;
+          const midAtDecision = pending?.midAtDecision ?? null;
+          const gasUsed = pending?.gasUsed ?? null;
+          const gasPrice = pending?.gasPrice ?? null;
+          const gasCost = gasUsed && gasPrice ? Number(BigInt(gasUsed) * BigInt(gasPrice)) / 1e18 : null;
+          insertBotFill(this.db, {
+            txHash,
+            blockNumber,
+            marketId,
+            symbol,
+            orderId: String(args?.takerOrderId ?? args?.makerOrderId ?? ""),
+            quantityFilled: qty,
+            fillPrice: price,
+            edgeAtDecision,
+            midAtDecision,
+            gasUsed,
+            gasPrice,
+            gasCost,
+            rawData: l,
+          });
+          logEvent(this.db, { marketId, symbol, eventType: "FILL_OBSERVED", data: { txHash, blockNumber, args, qty, price, edgeAtDecision, midAtDecision, gasUsed, gasPrice, gasCost }, blockNumber });
           this.updatePositionFromFill(marketId, symbol, qty, price);
+          // Clean up pending after fill observed
+          if (pending) {
+            this.pendingOrderMeta.delete(String(args?.makerOrderId ?? ""));
+            this.pendingOrderMeta.delete(String(args?.takerOrderId ?? ""));
+          }
         }
       } catch {
         // per-market log fetch failure — don't crash loop
@@ -539,10 +574,31 @@ export class BotRunner {
   }
 
   /** For tests: simulate a fill to trigger position/loss update without on-chain logs. */
-  simulateFill(marketId: string, symbol: string, quantityFilled: number, fillPrice: number | null, realizedPnLDelta: number): void {
-    const txHash = `0x${"a".repeat(64)}`;
+  simulateFill(
+    marketId: string,
+    symbol: string,
+    quantityFilled: number,
+    fillPrice: number | null,
+    realizedPnLDelta: number,
+    opts?: { edgeAtDecision?: number | null; midAtDecision?: number | null; gasUsed?: string | null; gasPrice?: string | null; gasCost?: number | null },
+  ): void {
+    const txHash = `0x${"a".repeat(64)}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const blockNumber = 999_999_999;
-    insertBotFill(this.db, { txHash, blockNumber, marketId, symbol, orderId: "test", quantityFilled, fillPrice, rawData: { simulated: true } });
+    insertBotFill(this.db, {
+      txHash,
+      blockNumber,
+      marketId,
+      symbol,
+      orderId: "test",
+      quantityFilled,
+      fillPrice,
+      edgeAtDecision: opts?.edgeAtDecision ?? null,
+      midAtDecision: opts?.midAtDecision ?? null,
+      gasUsed: opts?.gasUsed ?? null,
+      gasPrice: opts?.gasPrice ?? null,
+      gasCost: opts?.gasCost ?? null,
+      rawData: { simulated: true },
+    });
     const existing = getBotPosition(this.db, marketId);
     const net = (existing?.netPosition ?? 0) + quantityFilled;
     const realizedPnL = (existing?.realizedPnL ?? 0) + realizedPnLDelta;
@@ -551,7 +607,7 @@ export class BotRunner {
       marketId,
       symbol,
       eventType: "FILL_OBSERVED",
-      data: { simulated: true, quantityFilled, fillPrice, realizedPnLDelta, newNet: net, newRealizedPnL: realizedPnL },
+      data: { simulated: true, quantityFilled, fillPrice, realizedPnLDelta, newNet: net, newRealizedPnL: realizedPnL, edgeAtDecision: opts?.edgeAtDecision ?? null, midAtDecision: opts?.midAtDecision ?? null },
       blockNumber,
     });
   }

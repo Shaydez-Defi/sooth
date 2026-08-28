@@ -23,6 +23,7 @@ import os from "node:os";
 import path from "node:path";
 import { createExchange } from "@dreamdex-bot-kit/ec-core";
 import { openSnapshotDb, upsertBotPosition, insertBotFill, type PositionSide } from "../snapshots/db.js";
+import { applyFillToPosition } from "../bot/positions.js";
 import { SNAPSHOT_CONFIG } from "../config.js";
 import { createEcSettlementResolver, runSettlementPoll } from "../bot/settlementPoller.js";
 import { computeEdgeAnalytics } from "../analytics/edge.js";
@@ -105,8 +106,40 @@ async function main(): Promise<void> {
     });
     syntheticPositions.push({ marketId: r.marketId, symbol, side, entryPrice, entryTag });
   }
-  console.log(`[SYNTHETIC] built ${syntheticPositions.length} OPEN positions (size ${SIZE_PER_POSITION}) against REAL settled markets; ${skippedNoOnchain} settled-market rows skipped (onchain not resolved/voided)`);
+    console.log(`[SYNTHETIC] built ${syntheticPositions.length} OPEN positions (size ${SIZE_PER_POSITION}) against REAL settled markets; ${skippedNoOnchain} settled-market rows skipped (onchain not resolved/voided)`);
   for (const p of syntheticPositions) console.log(`  ${p.marketId.slice(0, 18)} ${p.symbol} side=${p.side} entry=${p.entryPrice.toFixed(4)} (${p.entryTag})`);
+
+  // EARLY_CLOSE must close an OPEN (still-live) market — seed 2 from non-Finalized EC markets so §5
+  // has an unresolved position to close. These stay OPEN through §4 (resolver reports unresolved).
+  const openForEC: Array<{ marketId: string; symbol: string; side: PositionSide; entryPrice: number }> = [];
+  try {
+    const liveRows = await ctx.exchange.client.listBinaryMarkets({ venueId: ctx.config.venueId as `0x${string}`, status: "Trading", limit: 20 });
+    let ecSeeded = 0;
+    for (const r of liveRows) {
+      if (ecSeeded >= 2) break;
+      if (!r?.marketId) continue;
+      const chain = await ctx.exchange.client.getMarketOnchain(r.marketId);
+      if (chain.isResolved || chain.isVoided) continue;
+      const ecSide: PositionSide = ecSeeded === 0 ? "YES" : "NO";
+      const ecSymbol = `${String(r.asset ?? "UNK")}-${String(r.intervalSec ?? "?")}s@${String(r.expiry ?? "?")}`;
+      upsertBotPosition(tmpDb, {
+        marketId: r.marketId,
+        symbol: ecSymbol,
+        side: ecSide,
+        netPosition: SIZE_PER_POSITION,
+        totalSize: SIZE_PER_POSITION,
+        avgEntryPrice: ecSide === "YES" ? 0.5 : 0.5,
+        realizedPnL: 0,
+        status: "OPEN",
+      });
+      openForEC.push({ marketId: r.marketId, symbol: ecSymbol, side: ecSide, entryPrice: 0.5 });
+      ecSeeded += 1;
+    }
+    console.log(`[SYNTHETIC] seeded ${openForEC.length} OPEN positions on live (unresolved) markets for EARLY_CLOSE demonstration`);
+    for (const p of openForEC) console.log(`  ${p.marketId.slice(0, 18)} ${p.symbol} side=${p.side} entry=${p.entryPrice.toFixed(4)} (ESTIMATED 0.5 — live market, no settled lastPrice)`);
+  } catch (err) {
+    console.log(`[WARN] could not seed EARLY_CLOSE live market: ${(err as Error).message} — EARLY_CLOSE demo skipped`);
+  }
 
   // ── 4. RUN the settlement poll against the REAL on-chain/INDEXER state ───────────────────────────
   const resolver = createEcSettlementResolver(ctx);
@@ -121,8 +154,8 @@ async function main(): Promise<void> {
 
   // ── 5. Demonstrate EARLY_CLOSE with a synthetic exit fill (fill → basis → realized P&L) ──────────
   let earlyCloseSaved: { marketId: string; symbol: string; status: string; realizationSource: string | null; realizedPnL: number } | null = null;
-  if (syntheticPositions.length >= 2) {
-    const ec = syntheticPositions[1] as { marketId: string; symbol: string; side: PositionSide; entryPrice: number };
+  const ec = openForEC.length >= 2 ? openForEC[1] : openForEC.length === 1 ? openForEC[0] : null;
+  if (ec) {
     const exitPrice = clampProb(ec.entryPrice + 0.05);
     const fillId = insertBotFill(tmpDb, {
       txHash: `0x${"e".repeat(64)}`,
@@ -136,14 +169,27 @@ async function main(): Promise<void> {
       fillPrice: exitPrice,
       rawData: { simulated: true, tag: "SYNTHETIC early-close verification" },
     });
+    // insertBotFill only persists the row — realization happens here via the SAME engine the bot
+    // uses (positions.ts applyFillToPosition → EARLY_CLOSE path). This is what proves the close logic
+    // against an OPEN position (the settlement poll left it open because the market is still live).
+    const fillResult = applyFillToPosition(tmpDb, {
+      marketId: ec.marketId,
+      symbol: ec.symbol,
+      side: "sell",
+      outcome: ec.side,
+      quantityFilled: SIZE_PER_POSITION,
+      fillPrice: exitPrice,
+      fillId,
+    });
     const closedByFill = tmpDb.prepare("SELECT status, realizationSource, realizedPnL FROM bot_positions WHERE marketId=?").get(ec.marketId) as {
       status: string;
       realizationSource: string | null;
       realizedPnL: number;
     };
     earlyCloseSaved = { marketId: ec.marketId, symbol: ec.symbol, ...closedByFill };
+    const delta = fillResult.kind === "error" ? 0 : fillResult.realizedPnLDelta;
     console.log(
-      `\n[EARLY_CLOSE] SYNTHETIC sell ${ec.side} ${SIZE_PER_POSITION} @${exitPrice.toFixed(4)} (fill id=${fillId}) → status=${closedByFill.status} source=${String(closedByFill.realizationSource)} cumulativeRealizedPnL=${closedByFill.realizedPnL.toFixed(4)}`,
+      `\n[EARLY_CLOSE] SYNTHETIC sell ${ec.side} ${SIZE_PER_POSITION} @${exitPrice.toFixed(4)} (fill id=${fillId}) → applyFillToPosition=${fillResult.kind}${fillResult.kind === "error" ? ` (${fillResult.reason})` : ""} realizedPnLDelta=${delta.toFixed(4)} → status=${closedByFill.status} source=${String(closedByFill.realizationSource)} cumulativeRealizedPnL=${closedByFill.realizedPnL.toFixed(4)}`,
     );
   }
 

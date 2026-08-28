@@ -37,7 +37,7 @@ marketId, symbol, side, avgEntryPrice, size, winningOutcome, voided, realizedPnL
 
 Resolution mapping (`outcomeOf`): `voided ⇒ "VOIDED"`, `winningOutcome===0 ⇒ "YES"`, `===1 ⇒ "NO"`, else `"?"`.
 
-**§5 — EARLY_CLOSE.** Inserts a synthetic `sell` exit fill via `insertBotFill(tmpDb, { … rawData:{simulated:true, tag:"SYNTHETIC early-close verification"} })` and reads back `status`/`realizationSource`/`realizedPnL` from `bot_positions` to demonstrate the fill → basis → realized-P&L path (fills are matched to `OPEN` positions in `positions.ts`).
+**§5 — EARLY_CLOSE.** Seeds 2 synthetic positions on *live (non-finalized)* markets (§3, `status:"Trading"` via `getMarketOnchain` confirms `isResolved/isVoided` false) so they stay `OPEN` through §4's poll, then for the 2nd one inserts a synthetic `sell` exit fill with `insertBotFill(tmpDb, { … rawData:{simulated:true, tag:"SYNTHETIC early-close verification"} })` and drives the **real** close via `applyFillToPosition(tmpDb, { side:"sell", outcome:ec.side, … })` (`src/bot/positions.ts:96`). That engine enforces the matching rule (`existing.side === outcome`, line 114: "sell the held side to exit") and writes `realizationSource:"EARLY_CLOSE"` + `status:"CLOSED"` + cumulative `realizedPnL` (formula `(exitPrice − avgEntryPrice) × qty`). The post-close row is read back to prove the close path.
 
 **§6 — Edge analytics.** `computeEdgeAnalytics(tmpDb)` emits, over the temp DB:
 
@@ -60,11 +60,13 @@ binary outcome, `voided ⇒ 0` payout; winning leg `YES(0)` pays `1 - avgEntryPr
 [EC] exchange created — network=testnet venue=0x6799… indexer=https://dev.smk.somnia.host/v1/graphql
 [HISTORICAL] listBinaryMarkets Finalized → K real settled markets
 [SYNTHETIC] built L OPEN positions (size 1) against REAL settled markets; S skipped
-[SETTLEMENT_POLL] checked=L realized=R stillOpen=O errors=E
-  [REALIZED] <SYM> YES size=1 avg=0.5000 outcome=YES pnl=+0.5000
-[EARLY_CLOSE] SYNTHETIC sell … → status=CLOSED source=EARLY_CLOSE cumulativeRealizedPnL=…
-[EDGE_ANALYTICS] status=OK fills=F positions=P
-  winRate=… realizedEdge=… grossPnL=… adverseSelection=… maxDrawdown=…
+[SYNTHETIC] seeded 2 OPEN positions on live (unresolved) markets for EARLY_CLOSE demonstration
+[SETTLEMENT_POLL] checked=L+2 realized=R stillOpen=2 errors=0
+  [REALIZED] <SYM> YES size=1 avg=0.6310 outcome=NO pnl=-0.6310
+  [STILL_OPEN] 0x0000…c492 — status=1 unresolved and not voided — no premature realization
+[EARLY_CLOSE] SYNTHETIC sell NO 1 @0.5500 (fill id=1) → applyFillToPosition=closed_early realizedPnLDelta=0.0500 → status=CLOSED source=EARLY_CLOSE cumulativeRealizedPnL=0.0500
+[EDGE_ANALYTICS] status=ok fills=1 positions=L+2
+  winRate=0.571 winning=4 losing=3 resolved=7 open=1 realizedEdge=-0.0437 grossPnL=-0.3060 adverseSelection=null maxDrawdown=null averageEdge=null
 [VERIFICATION_JSON] { … }
 [OK] verification complete — real bot DB untouched.
 ```

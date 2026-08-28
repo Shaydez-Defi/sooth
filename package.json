@@ -21,6 +21,7 @@
     "backtest": "tsx src/scripts/backtest.ts",
     "snapshot": "tsx src/scripts/snapshot-logger.ts",
     "strategy:dry-run": "tsx src/scripts/strategy-dry-run.ts",
+    "bot:smoke": "tsx src/scripts/bot-smoke.ts",
     "test": "vitest run"
   },
   "dependencies": {

@@ -140,6 +140,36 @@ export const BOT_CONFIG = {
   MIN_NATIVE_WEI: 10_000_000_000_000_000n, // 0.01 * 1e18
   /** Min collateral raw (tUSDC 6dp) loose check — 0.5 tUSDC. Precise check is price*size. */
   MIN_COLLATERAL_RAW: 500_000n, // 0.5 * 1e6
+  /** Loop interval for BotRunner (ms) — reuses snapshot logger's poll interval if env not set, min 5000. */
+  LOOP_INTERVAL_MS: (() => {
+    const raw = process.env.BOT_LOOP_INTERVAL_MS?.trim();
+    if (raw === undefined || raw === "") return 30_000;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 5_000) {
+      throw new Error(`Invalid BOT_LOOP_INTERVAL_MS="${raw}": must be a number >= 5000 (ms).`);
+    }
+    return n;
+  })(),
+} as const;
+
+/**
+ * MID-MOVE OBSERVABILITY — lightweight mid-price drift alert, NOT a trading signal.
+ * Compares current mid to most recent prior snapshot for same market in data/snapshots.db.
+ * Threshold chosen as 0.02-0.03 probability points (2-3 cents) — small enough to catch
+ * intraday drifts observed in stage-logger data (e.g. 0.082 move over 47s) while not
+ * spamming on every 1-tick jitter. DERIVED, not magic in logic.
+ */
+export const MID_MOVE_CONFIG = {
+  /** Alert threshold in probability points (e.g. 0.025 = 2.5 cents). */
+  MID_MOVE_ALERT_THRESHOLD: (() => {
+    const raw = process.env.MID_MOVE_ALERT_THRESHOLD?.trim();
+    if (raw === undefined || raw === "") return 0.025;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0 || n >= 1) {
+      throw new Error(`Invalid MID_MOVE_ALERT_THRESHOLD="${raw}": must be a number in (0,1).`);
+    }
+    return n;
+  })(),
 } as const;
 
 export function loadConfig(): AppConfig {

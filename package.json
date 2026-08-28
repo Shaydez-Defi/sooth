@@ -19,17 +19,20 @@
     "stage2": "tsx src/scripts/stage2-place-cancel.ts",
     "analyze": "tsx src/scripts/analyze-markets.ts",
     "backtest": "tsx src/scripts/backtest.ts",
+    "strategy:dry-run": "tsx src/scripts/strategy-dry-run.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "@dreamdex-bot-kit/core": "file:vendor/dreamdex-bot-kit/packages/core",
     "@dreamdex-bot-kit/ec-core": "file:vendor/dreamdex-bot-kit/packages/ec-core",
     "@somnia-chain/markets-sdk": "^0.28.1",
+    "better-sqlite3": "^13.0.3",
     "dotenv": "^16.4.5",
     "viem": "^2.21.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20.14.0",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^8.0.0",

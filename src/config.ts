@@ -71,6 +71,25 @@ function validatePrivateKey(raw: string | undefined): string | undefined {
 }
 
 /**
+ * SNAPSHOT LOGGER — poller config for continuous order-book capture.
+ * Tag: DERIVED (env) — poll interval env-overridable, DB path zero external service.
+ */
+export const SNAPSHOT_CONFIG = {
+  /** Poller interval in ms — env POLL_INTERVAL_MS overrides, must be >= 5_000. */
+  POLL_INTERVAL_MS: (() => {
+    const raw = process.env.POLL_INTERVAL_MS?.trim();
+    if (raw === undefined || raw === "") return 45_000;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 5_000) {
+      throw new Error(`Invalid POLL_INTERVAL_MS="${raw}": must be a number >= 5000 (ms).`);
+    }
+    return n;
+  })(),
+  /** SQLite path — zero external service dependency (Codespace unattended). */
+  DB_PATH: process.env.SNAPSHOT_DB_PATH?.trim() ? String(process.env.SNAPSHOT_DB_PATH?.trim()) : "data/snapshots.db",
+} as const;
+
+/**
  * ANALYSIS — thresholds for Market Intelligence Engine (all in src/config.ts per brief, no inline magic numbers).
  * Depth window: top N levels of YES book (bid/ask quantity sum). See src/analysis/engine.ts for formula.
  */
@@ -89,6 +108,38 @@ export const ANALYSIS_CONFIG = {
   MAX_SPREAD_BPS: 600,
   /** Minimum seconds remaining to expiry to recommend TRADE (buffer). */
   MIN_TIME_REMAINING: 300,
+} as const;
+
+/**
+ * BOT — defaults for Strategy/Risk pipeline (brief sections 7 & 9).
+ * All risk thresholds in src/config.ts, no inline magic in strategy/risk modules.
+ * Values are DERIVED, not LIVE_ONCHAIN.
+ */
+export const BOT_CONFIG = {
+  /** Bot enabled. */
+  ENABLED: true,
+  /** Max open positions (position limit). */
+  MAX_POSITION: 5,
+  /** Max cumulative loss in tUSDC before halt. */
+  MAX_LOSS: 50,
+  /** Min liquidity — mirrors ANALYSIS_CONFIG.MIN_LIQUIDITY. */
+  MIN_LIQUIDITY: ANALYSIS_CONFIG.MIN_LIQUIDITY,
+  /** Max spread — mirrors ANALYSIS_CONFIG.MAX_SPREAD. */
+  MAX_SPREAD: ANALYSIS_CONFIG.MAX_SPREAD,
+  /** Max spread bps — mirrors ANALYSIS_CONFIG.MAX_SPREAD_BPS. */
+  MAX_SPREAD_BPS: ANALYSIS_CONFIG.MAX_SPREAD_BPS,
+  /** Min seconds to expiry — mirrors ANALYSIS_CONFIG.MIN_TIME_REMAINING. */
+  MIN_TIME_REMAINING: ANALYSIS_CONFIG.MIN_TIME_REMAINING,
+  /** Min order size (shares). Must be >= EC lot (testnet 1 raw = 0.000001). */
+  MIN_ORDER_SIZE: 1,
+  /** Max order size (shares). */
+  MAX_ORDER_SIZE: 10,
+  /** Default order size for edge-threshold strategy. */
+  DEFAULT_ORDER_SIZE: 1,
+  /** Min native balance for gas (wei) — 0.01 STT. */
+  MIN_NATIVE_WEI: 10_000_000_000_000_000n, // 0.01 * 1e18
+  /** Min collateral raw (tUSDC 6dp) loose check — 0.5 tUSDC. Precise check is price*size. */
+  MIN_COLLATERAL_RAW: 500_000n, // 0.5 * 1e6
 } as const;
 
 export function loadConfig(): AppConfig {

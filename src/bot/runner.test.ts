@@ -43,13 +43,13 @@ describe("BotRunner — lifecycle, auto-stop, events, fills", () => {
     runner.close();
   });
 
-  it("loss-limit-triggered auto-stop (synthetic) — when currentLoss >= maxLoss, checkAutoStopReason returns reason and start() refuses", () => {
+  it("loss-limit-triggered auto-stop (synthetic) — cost basis buy then EARLY_CLOSE sell realizes a real loss", () => {
     const runner = new BotRunner({ dbPath: ":memory:", ecFactory: makeMockEcFactory() });
-    // Set maxLoss low, then simulate a fill that pushes realized PnL negative beyond limit
+    // Set maxLoss low, then buy 100 @0.60 and sell 100 @0.50 → realized loss of 10 tUSDC
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     runner.updateConfig({ bot: { ...runner.getConfig().bot, maxLoss: 5 } as unknown as import("../strategy/types.js").BotConfig });
-    // Simulate fill that causes realized loss of 10 tUSDC (negative PnL)
-    runner.simulateFill("0xabc", "ETH-TEST/tUSDC", 1, 0.5, -10);
+    runner.simulateFill("0xabc", "ETH-TEST/tUSDC", 100, 0.6);
+    runner.simulateFill("0xabc", "ETH-TEST/tUSDC", 100, 0.5, { side: "sell" });
     expect(getTotalRealizedPnL(runner.getDb())).toBeCloseTo(-10, 2);
     const reason = runner.checkAutoStopReason();
     expect(reason).not.toBeNull();
@@ -74,20 +74,26 @@ describe("BotRunner — lifecycle, auto-stop, events, fills", () => {
     runner.close();
   });
 
-  it("fill-based position update from synthetic OrderFilled-shaped input", () => {
+  it("fill-based position update builds weighted-average cost basis (buys do not realize until exit/settlement)", () => {
     const runner = new BotRunner({ dbPath: ":memory:" });
     expect(getBotPosition(runner.getDb(), "0xabc")).toBeUndefined();
-    runner.simulateFill("0xabc", "ETH-TEST/tUSDC", 2, 0.6, 0.4); // buy 2 @0.6, PnL +0.4? actually realized
+    runner.simulateFill("0xabc", "ETH-TEST/tUSDC", 2, 0.6); // buy 2 @ 0.6
     const pos = getBotPosition(runner.getDb(), "0xabc");
     expect(pos).toBeDefined();
     expect(pos?.netPosition).toBeCloseTo(2, 2);
-    expect(pos?.realizedPnL).toBeCloseTo(0.4, 2);
-    // Second fill adds
-    runner.simulateFill("0xabc", "ETH-TEST/tUSDC", 1, 0.55, -0.2);
+    expect(pos?.totalSize).toBeCloseTo(2, 2);
+    expect(pos?.avgEntryPrice).toBeCloseTo(0.6, 6);
+    // buys cannot realize P&L — that happens at EARLY_CLOSE (sell) or SETTLEMENT
+    expect(pos?.realizedPnL).toBeCloseTo(0, 2);
+    expect(pos?.status).toBe("OPEN");
+    // Second fill adds at a different price → quantity-weighted average entry
+    runner.simulateFill("0xabc", "ETH-TEST/tUSDC", 1, 0.55);
     const pos2 = getBotPosition(runner.getDb(), "0xabc");
     expect(pos2?.netPosition).toBeCloseTo(3, 2);
-    expect(pos2?.realizedPnL).toBeCloseTo(0.2, 2);
-    expect(getTotalRealizedPnL(runner.getDb())).toBeCloseTo(0.2, 2);
+    expect(pos2?.totalSize).toBeCloseTo(3, 2);
+    expect(pos2?.avgEntryPrice).toBeCloseTo((0.6 * 2 + 0.55 * 1) / 3, 6);
+    expect(pos2?.realizedPnL).toBeCloseTo(0, 2);
+    expect(getTotalRealizedPnL(runner.getDb())).toBeCloseTo(0, 2);
     // Event log has FILL_OBSERVED
     const fills = runner.getDb().prepare("SELECT * FROM bot_fills").all() as Array<{ marketId: string }>;
     expect(fills.length).toBe(2);

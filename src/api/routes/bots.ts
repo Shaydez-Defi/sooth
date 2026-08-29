@@ -166,7 +166,7 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
       const result = computeEdgeAnalytics(db);
       db.close();
       // Edge analytics tags per spec
-      return reply.send({ data: result, dataIntegrity: { fills: "LIVE_ONCHAIN", positions: "LIVE_ONCHAIN", edgeAtDecision: "HISTORICAL", computed: "DERIVED" } as const });
+      return reply.send({ data: result, dataIntegrity: { fills: "LIVE_ONCHAIN", positions: "LIVE_ONCHAIN", edgeAtDecision: "HISTORICAL", snapshots: "HISTORICAL", computed: "DERIVED" } as const });
     } catch (err) {
       return reply.status(500).send({ error: `GET /bots/:id/performance failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });
     }

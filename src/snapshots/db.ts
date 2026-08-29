@@ -100,8 +100,11 @@ export function initDb(db: Database.Database): void {
       marketId TEXT NOT NULL,
       symbol TEXT NOT NULL,
       orderId TEXT,
+      side TEXT,
+      outcome TEXT,
       quantityFilled REAL,
       fillPrice REAL,
+      realizedPnL REAL,
       edgeAtDecision REAL,
       midAtDecision REAL,
       gasUsed TEXT,
@@ -115,8 +118,14 @@ export function initDb(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS bot_positions (
       marketId TEXT PRIMARY KEY,
       symbol TEXT NOT NULL,
+      side TEXT NOT NULL DEFAULT 'YES',
       netPosition REAL NOT NULL,
+      totalSize REAL NOT NULL DEFAULT 0,
+      avgEntryPrice REAL,
       realizedPnL REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      realizationSource TEXT,
+      realizedAtUnix INTEGER,
       updatedAtUnix INTEGER NOT NULL
     );
 
@@ -130,6 +139,29 @@ export function initDb(db: Database.Database): void {
   for (const col of ["edgeAtDecision REAL", "midAtDecision REAL", "gasUsed TEXT", "gasPrice TEXT", "gasCost REAL"]) {
     try {
       db.exec(`ALTER TABLE bot_fills ADD COLUMN ${col}`);
+    } catch {
+      // column already exists — ignore
+    }
+  }
+  // Migration for existing bot_fills without stage-9 side/outcome/realizedPnL columns
+  for (const col of ["side TEXT", "outcome TEXT", "realizedPnL REAL"]) {
+    try {
+      db.exec(`ALTER TABLE bot_fills ADD COLUMN ${col}`);
+    } catch {
+      // column already exists — ignore
+    }
+  }
+  // Migration for existing bot_positions without stage-9 cost-basis/realization columns
+  for (const col of [
+    "side TEXT NOT NULL DEFAULT 'YES'",
+    "totalSize REAL NOT NULL DEFAULT 0",
+    "avgEntryPrice REAL",
+    "status TEXT NOT NULL DEFAULT 'OPEN'",
+    "realizationSource TEXT",
+    "realizedAtUnix INTEGER",
+  ]) {
+    try {
+      db.exec(`ALTER TABLE bot_positions ADD COLUMN ${col}`);
     } catch {
       // column already exists — ignore
     }
@@ -218,6 +250,15 @@ export function countBotEvents(db: Database.Database): number {
   return row.c;
 }
 
+/** Side of a fill on the book: buy (opens/adds an outcome position) or sell (exits — EARLY_CLOSE). */
+export type FillSide = "buy" | "sell";
+/** The outcome token a position/fill trades: YES (outcome 0) or NO (outcome 1). */
+export type PositionSide = "YES" | "NO";
+/** Position lifecycle status. CLOSED = realized (SETTLEMENT or EARLY_CLOSE). */
+export type PositionStatus = "OPEN" | "CLOSED";
+/** How a position's P&L was realized. SETTLEMENT = market resolved/voided on-chain; EARLY_CLOSE = exited by an opposite-side fill before settlement. */
+export type RealizationSource = "SETTLEMENT" | "EARLY_CLOSE";
+
 export interface BotFillRow {
   readonly id: number;
   readonly capturedAtUnix: number;
@@ -227,8 +268,11 @@ export interface BotFillRow {
   readonly marketId: string;
   readonly symbol: string;
   readonly orderId: string | null;
+  readonly side: FillSide | null;
+  readonly outcome: PositionSide | null;
   readonly quantityFilled: number | null;
   readonly fillPrice: number | null;
+  readonly realizedPnL: number | null;
   readonly edgeAtDecision: number | null;
   readonly midAtDecision: number | null;
   readonly gasUsed: string | null;
@@ -245,8 +289,12 @@ export function insertBotFill(
     marketId: string;
     symbol: string;
     orderId?: string | null;
+    side?: FillSide | null;
+    outcome?: PositionSide | null;
     quantityFilled?: number | null;
     fillPrice?: number | null;
+    realizedPnL?: number | null;
+    capturedAtUnix?: number | null;
     edgeAtDecision?: number | null;
     midAtDecision?: number | null;
     gasUsed?: string | null;
@@ -255,11 +303,11 @@ export function insertBotFill(
     rawData?: unknown;
   },
 ): number {
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const nowIso = new Date().toISOString();
+  const nowUnix = params.capturedAtUnix ?? Math.floor(Date.now() / 1000);
+  const nowIso = new Date(nowUnix * 1000).toISOString();
   const stmt = db.prepare(`
-    INSERT INTO bot_fills (capturedAtUnix, capturedAtIso, txHash, blockNumber, marketId, symbol, orderId, quantityFilled, fillPrice, edgeAtDecision, midAtDecision, gasUsed, gasPrice, gasCost, rawData)
-    VALUES (@capturedAtUnix, @capturedAtIso, @txHash, @blockNumber, @marketId, @symbol, @orderId, @quantityFilled, @fillPrice, @edgeAtDecision, @midAtDecision, @gasUsed, @gasPrice, @gasCost, @rawData)
+    INSERT INTO bot_fills (capturedAtUnix, capturedAtIso, txHash, blockNumber, marketId, symbol, orderId, side, outcome, quantityFilled, fillPrice, realizedPnL, edgeAtDecision, midAtDecision, gasUsed, gasPrice, gasCost, rawData)
+    VALUES (@capturedAtUnix, @capturedAtIso, @txHash, @blockNumber, @marketId, @symbol, @orderId, @side, @outcome, @quantityFilled, @fillPrice, @realizedPnL, @edgeAtDecision, @midAtDecision, @gasUsed, @gasPrice, @gasCost, @rawData)
   `);
   const info = stmt.run({
     capturedAtUnix: nowUnix,
@@ -269,8 +317,11 @@ export function insertBotFill(
     marketId: params.marketId,
     symbol: params.symbol,
     orderId: params.orderId ?? null,
+    side: params.side ?? null,
+    outcome: params.outcome ?? null,
     quantityFilled: params.quantityFilled ?? null,
     fillPrice: params.fillPrice ?? null,
+    realizedPnL: params.realizedPnL ?? null,
     edgeAtDecision: params.edgeAtDecision ?? null,
     midAtDecision: params.midAtDecision ?? null,
     gasUsed: params.gasUsed ?? null,
@@ -288,31 +339,92 @@ export function listBotFills(db: Database.Database, limit = 100): BotFillRow[] {
 export interface BotPositionRow {
   readonly marketId: string;
   readonly symbol: string;
+  readonly side: PositionSide;
   readonly netPosition: number;
+  readonly totalSize: number;
+  readonly avgEntryPrice: number | null;
   readonly realizedPnL: number;
+  readonly status: PositionStatus;
+  readonly realizationSource: RealizationSource | null;
+  readonly realizedAtUnix: number | null;
   readonly updatedAtUnix: number;
 }
 
 export function upsertBotPosition(
   db: Database.Database,
-  params: { marketId: string; symbol: string; netPosition: number; realizedPnL: number },
+  params: {
+    marketId: string;
+    symbol: string;
+    side?: PositionSide;
+    netPosition: number;
+    totalSize?: number;
+    avgEntryPrice?: number | null;
+    realizedPnL: number;
+    status?: PositionStatus;
+    realizationSource?: RealizationSource | null;
+    realizedAtUnix?: number | null;
+  },
 ): void {
   const nowUnix = Math.floor(Date.now() / 1000);
   db.prepare(
-    `INSERT INTO bot_positions (marketId, symbol, netPosition, realizedPnL, updatedAtUnix)
-     VALUES (@marketId, @symbol, @netPosition, @realizedPnL, @updatedAtUnix)
-     ON CONFLICT(marketId) DO UPDATE SET symbol=@symbol, netPosition=@netPosition, realizedPnL=@realizedPnL, updatedAtUnix=@updatedAtUnix`,
+    `INSERT INTO bot_positions (marketId, symbol, side, netPosition, totalSize, avgEntryPrice, realizedPnL, status, realizationSource, realizedAtUnix, updatedAtUnix)
+     VALUES (@marketId, @symbol, @side, @netPosition, @totalSize, @avgEntryPrice, @realizedPnL, @status, @realizationSource, @realizedAtUnix, @updatedAtUnix)
+     ON CONFLICT(marketId) DO UPDATE SET symbol=@symbol, side=@side, netPosition=@netPosition, totalSize=@totalSize, avgEntryPrice=@avgEntryPrice, realizedPnL=@realizedPnL, status=@status, realizationSource=@realizationSource, realizedAtUnix=@realizedAtUnix, updatedAtUnix=@updatedAtUnix`,
   ).run({
     marketId: params.marketId,
     symbol: params.symbol,
+    side: params.side ?? "YES",
     netPosition: params.netPosition,
+    totalSize: params.totalSize ?? Math.abs(params.netPosition),
+    avgEntryPrice: params.avgEntryPrice ?? null,
     realizedPnL: params.realizedPnL,
+    status: params.status ?? "OPEN",
+    realizationSource: params.realizationSource ?? null,
+    realizedAtUnix: params.realizedAtUnix ?? null,
     updatedAtUnix: nowUnix,
   });
 }
 
+/** Partial update of one position row. Only keys present in the patch are written. Never silent: caller validates. */
+export function patchBotPosition(
+  db: Database.Database,
+  marketId: string,
+  patch: {
+    readonly side?: PositionSide;
+    readonly netPosition?: number;
+    readonly totalSize?: number;
+    readonly avgEntryPrice?: number | null;
+    readonly realizedPnL?: number;
+    readonly status?: PositionStatus;
+    readonly realizationSource?: RealizationSource | null;
+    readonly realizedAtUnix?: number | null;
+  },
+): void {
+  const sets: string[] = [];
+  const bind: Record<string, unknown> = { marketId };
+  for (const key of ["side", "netPosition", "totalSize", "avgEntryPrice", "realizedPnL", "status", "realizationSource", "realizedAtUnix"] as const) {
+    if (patch[key] !== undefined) {
+      sets.push(`${key}=@${key}`);
+      bind[key] = patch[key];
+    }
+  }
+  bind.updatedAtUnix = Math.floor(Date.now() / 1000);
+  sets.push("updatedAtUnix=@updatedAtUnix");
+  db.prepare(`UPDATE bot_positions SET ${sets.join(", ")} WHERE marketId=@marketId`).run(bind);
+}
+
 export function getBotPositions(db: Database.Database): BotPositionRow[] {
   return db.prepare("SELECT * FROM bot_positions").all() as BotPositionRow[];
+}
+
+/** Positions still holding exposure (cost basis built, not yet realized). This is what the settlement poller iterates. */
+export function getOpenBotPositions(db: Database.Database): BotPositionRow[] {
+  return db.prepare("SELECT * FROM bot_positions WHERE status='OPEN' AND totalSize > 0").all() as BotPositionRow[];
+}
+
+/** Positions whose P&L has been realized (SETTLEMENT or EARLY_CLOSE), per brief tag: wins/losses derivable from this. */
+export function getClosedBotPositions(db: Database.Database): BotPositionRow[] {
+  return db.prepare("SELECT * FROM bot_positions WHERE status='CLOSED'").all() as BotPositionRow[];
 }
 
 export function getBotPosition(db: Database.Database, marketId: string): BotPositionRow | undefined {
@@ -330,4 +442,25 @@ export function getLatestSnapshotMid(db: Database.Database, marketId: string): {
     | { mid: number | null; capturedAtUnix: number; blockNumber: number | null }
     | undefined;
   return row;
+}
+
+/**
+ * Closest real snapshot mid to `targetUnix` for a market (adverse selection per fill).
+ * Returns null when no snapshot is within `maxDeviationSeconds` — callers then report the fill's
+ * adverse selection as NOT COMPUTABLE (never interpolate or approximate silently).
+ * Tag: LIVE_INDEXER mid (HISTORICAL snapshot), DERIVED deviation.
+ */
+export function closestSnapshotMid(
+  db: Database.Database,
+  marketId: string,
+  targetUnix: number,
+  maxDeviationSeconds: number,
+): { mid: number; capturedAtUnix: number; deviationSeconds: number } | null {
+  const row = db
+    .prepare(
+      "SELECT mid, capturedAtUnix, ABS(capturedAtUnix - ?) AS deviation FROM snapshots WHERE marketId=? AND mid IS NOT NULL ORDER BY deviation ASC LIMIT 1",
+    )
+    .get(targetUnix, marketId) as { mid: number | null; capturedAtUnix: number; deviation: number } | undefined;
+  if (row === undefined || row.mid === null || row.deviation > maxDeviationSeconds) return null;
+  return { mid: row.mid, capturedAtUnix: row.capturedAtUnix, deviationSeconds: row.deviation };
 }

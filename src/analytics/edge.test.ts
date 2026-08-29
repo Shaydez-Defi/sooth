@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { openSnapshotDb, insertBotFill, insertBotEvent, upsertBotPosition } from "../snapshots/db.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { openSnapshotDb, insertBotFill, insertBotEvent, insertSnapshot, upsertBotPosition } from "../snapshots/db.js";
 import { computeEdgeAnalytics } from "./edge.js";
 
 describe("edge analytics — synthetic fills, not live", () => {
@@ -126,5 +126,92 @@ describe("edge analytics — synthetic fills, not live", () => {
     expect(result.metrics.averageEdge).toBeNull();
     expect(result.metrics.gaps.join(" ")).toContain("averageEdge");
     db.close();
+  });
+});
+describe("edge analytics — Stage 9: winRate/realizedEdge from realized positions, adverse selection from real snapshots", () => {
+  const T0 = 1_700_000_000; // fixed synthetic fill time (seconds)
+
+  const snap = (marketId: string, symbol: string, mid: number, at: number, idOffset = 0) =>
+    insertSnapshot(dbFixture, {
+      marketId,
+      symbol,
+      capturedAtUnix: at,
+      capturedAtIso: new Date(at * 1000).toISOString(),
+      bidLevels: [[mid - 0.01, 100]],
+      askLevels: [[mid + 0.01, 100]],
+      mid,
+      bidDepth: 100,
+      askDepth: 100,
+      imbalance: 0,
+      blockNumber: 100 + idOffset,
+    });
+
+  let dbFixture: import("better-sqlite3").Database;
+
+  beforeEach(() => {
+    dbFixture = openSnapshotDb(":memory:");
+  });
+
+  afterEach(() => {
+    dbFixture.close();
+  });
+
+  it("winRate/winning/losing/realizedEdge from CLOSED positions only; open positions excluded; gaps scoped", () => {
+    upsertBotPosition(dbFixture, { marketId: "0xA", symbol: "X/tUSDC", side: "YES", netPosition: 1, totalSize: 0, avgEntryPrice: 0.6, realizedPnL: 0.4, status: "CLOSED", realizationSource: "SETTLEMENT", realizedAtUnix: T0 });
+    upsertBotPosition(dbFixture, { marketId: "0xB", symbol: "Y/tUSDC", side: "YES", netPosition: 1, totalSize: 0, avgEntryPrice: 0.6, realizedPnL: -0.1, status: "CLOSED", realizationSource: "EARLY_CLOSE", realizedAtUnix: T0 });
+    upsertBotPosition(dbFixture, { marketId: "0xC", symbol: "Z/tUSDC", side: "YES", netPosition: 2, totalSize: 2, avgEntryPrice: 0.6, realizedPnL: 0, status: "OPEN" });
+    insertBotFill(dbFixture, { txHash: "0xfz1", blockNumber: 1, marketId: "0xC", symbol: "Z/tUSDC", orderId: "z1", side: "buy", outcome: "YES", quantityFilled: 2, fillPrice: 0.6, capturedAtUnix: T0, rawData: { simulated: true } });
+
+    const result = computeEdgeAnalytics(dbFixture);
+    expect(result.status).toBe("ok");
+    if (!result.metrics) throw new Error("expected metrics");
+    expect(result.metrics.winningTrades).toBe(1);
+    expect(result.metrics.losingTrades).toBe(1);
+    expect(result.metrics.winRate).toBeCloseTo(0.5, 6);
+    expect(result.metrics.realizedEdge).toBeCloseTo((0.4 + -0.1) / 2, 6);
+    expect(result.metrics.resolvedTrades).toBe(2);
+    expect(result.metrics.openPositions).toBe(1);
+    expect(result.metrics.grossPnL).toBeCloseTo(0.3, 6); // 0.4 - 0.1 + 0 (open)
+    // scoped gap: open position excluded, but the metric IS computed — no blanket gap
+    const gaps = result.metrics.gaps.join(" ");
+    expect(gaps).toContain("1 open position(s) excluded");
+  });
+
+  it("adverse selection from REAL snapshots near fill+5m, signed by side", () => {
+    snap("0xM", "BTC-TEST/tUSDC", 0.48, T0 + 300, 1);
+    snap("0xN", "ETH-TEST/tUSDC", 0.55, T0 + 300, 2);
+    // buy at 0.50, mid falls to 0.48 at t+5m → adverse (0.50-0.48)*+1 = 0.02
+    insertBotFill(dbFixture, { txHash: "0xfM", blockNumber: 1, marketId: "0xM", symbol: "BTC-TEST/tUSDC", orderId: "m1", side: "buy", outcome: "YES", quantityFilled: 1, fillPrice: 0.5, capturedAtUnix: T0, rawData: { simulated: true } });
+    // sell at 0.50, mid rises to 0.55 at t+5m → adverse (0.50-0.55)*-1 = 0.05
+    insertBotFill(dbFixture, { txHash: "0xfN", blockNumber: 1, marketId: "0xN", symbol: "ETH-TEST/tUSDC", orderId: "n1", side: "sell", outcome: "YES", quantityFilled: 1, fillPrice: 0.5, capturedAtUnix: T0, rawData: { simulated: true } });
+
+    const result = computeEdgeAnalytics(dbFixture);
+    if (!result.metrics) throw new Error("expected metrics");
+    expect(result.metrics.adverseSelection).toBeCloseTo((0.02 + 0.05) / 2, 6);
+    expect(result.metrics.gaps.join(" ")).not.toContain("adverseSelection: no fill has a computable post-fill mid");
+  });
+
+  it("adverseSelection NOT COMPUTABLE per fill when no snapshot exists near fill+5m", () => {
+    snap("0xM", "BTC-TEST/tUSDC", 0.55, 100, 1); // a real snapshot, but far from T0+300
+    insertBotFill(dbFixture, { txHash: "0xfX", blockNumber: 1, marketId: "0xM", symbol: "BTC-TEST/tUSDC", orderId: "x1", side: "buy", outcome: "YES", quantityFilled: 1, fillPrice: 0.5, capturedAtUnix: T0, rawData: { simulated: true } });
+    upsertBotPosition(dbFixture, { marketId: "0xM", symbol: "BTC-TEST/tUSDC", netPosition: 1, realizedPnL: 0 });
+
+    const result = computeEdgeAnalytics(dbFixture);
+    if (!result.metrics) throw new Error("expected metrics");
+    expect(result.metrics.adverseSelection).toBeNull();
+    const gaps = result.metrics.gaps.join(" ");
+    expect(gaps).toContain("adverseSelection fill id=");
+    expect(gaps).toContain("no snapshot within");
+    expect(gaps).toContain("0xM");
+  });
+
+  it("fills without side/outcome (pre-Stage-9) report per-fill adverse-selection gaps", () => {
+    snap("0xM", "BTC-TEST/tUSDC", 0.48, T0 + 300, 1);
+    insertBotFill(dbFixture, { txHash: "0xfL", blockNumber: 1, marketId: "0xM", symbol: "BTC-TEST/tUSDC", orderId: "l1", quantityFilled: 1, fillPrice: 0.5, capturedAtUnix: T0, rawData: { simulated: true } });
+
+    const result = computeEdgeAnalytics(dbFixture);
+    if (!result.metrics) throw new Error("expected metrics");
+    expect(result.metrics.adverseSelection).toBeNull();
+    expect(result.metrics.gaps.join(" ")).toContain("side/outcome not recorded");
   });
 });

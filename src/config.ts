@@ -172,6 +172,57 @@ export const MID_MOVE_CONFIG = {
   })(),
 } as const;
 
+/**
+ * SETTLEMENT POLLER — cadence for realized-P&L settlement checks (brief §13 gap-close).
+ * Settlement happens on the market's own clock, not the bot's trading clock, so this poller runs
+ * on its OWN interval, decoupled from the BotRunner loop. DERIVED config, env-overridable.
+ */
+export const SETTLEMENT_POLL_CONFIG = {
+  /** Poll interval in ms — env SETTLEMENT_POLL_INTERVAL_MS overrides, must be >= 5000. */
+  POLL_INTERVAL_MS: (() => {
+    const raw = process.env.SETTLEMENT_POLL_INTERVAL_MS?.trim();
+    if (raw === undefined || raw === "") return 60_000;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 5_000) {
+      throw new Error(`Invalid SETTLEMENT_POLL_INTERVAL_MS="${raw}": must be a number >= 5000 (ms).`);
+    }
+    return n;
+  })(),
+} as const;
+
+/**
+ * ADVERSE SELECTION — post-fill mid lookahead for edge analytics (brief §13 gap-close).
+ * After a real fill we measure where the mid went over the next N minutes vs our fill price,
+ * joined from the snapshot logger's real mid history (data/snapshots.db, polled ~45s).
+ *   LOOKAHEAD_SECONDS: 300 (5 min) — long enough to capture info-driven drift after our taker flow
+ *     (observed mids in snapshots.db move substantially within minutes), short enough to stay inside
+ *     the market's short trading window.
+ *   MAX_DEVIATION_SECONDS: 120 (2 min) — the logger polls every ~45s, so a snapshot within ±120s of
+ *     fillTime+N is at most ~2 polls off the target; anything further is not "close enough to t+N"
+ *     and that fill is reported NOT COMPUTABLE (never interpolated).
+ * DERIVED config, env-overridable, no magic numbers in logic.
+ */
+export const ADVERSE_SELECTION_CONFIG = {
+  LOOKAHEAD_SECONDS: (() => {
+    const raw = process.env.ADVERSE_SELECTION_LOOKAHEAD_SECONDS?.trim();
+    if (raw === undefined || raw === "") return 300;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new Error(`Invalid ADVERSE_SELECTION_LOOKAHEAD_SECONDS="${raw}": must be a positive integer (seconds).`);
+    }
+    return n;
+  })(),
+  MAX_DEVIATION_SECONDS: (() => {
+    const raw = process.env.ADVERSE_SELECTION_DEVIATION_SECONDS?.trim();
+    if (raw === undefined || raw === "") return 120;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new Error(`Invalid ADVERSE_SELECTION_DEVIATION_SECONDS="${raw}": must be a positive integer (seconds).`);
+    }
+    return n;
+  })(),
+} as const;
+
 export function loadConfig(): AppConfig {
   // SOMNIA_TESTNET_RPC_URL / RPC_URL fallback, DREAMDEX_API_BASE / REST_API_URL fallback, CHAIN_ID, NETWORK
   const somniaRpcUrl =

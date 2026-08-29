@@ -20,6 +20,8 @@
     "analyze": "tsx src/scripts/analyze-markets.ts",
     "backtest": "tsx src/scripts/backtest.ts",
     "snapshot": "tsx src/scripts/snapshot-logger.ts",
+    "settle": "tsx src/scripts/settlement-poller.ts",
+    "stage9:verify": "tsx src/scripts/stage9-verify.ts",
     "api": "tsx src/api/server.ts",
     "strategy:dry-run": "tsx src/scripts/strategy-dry-run.ts",
     "bot:smoke": "tsx src/scripts/bot-smoke.ts",

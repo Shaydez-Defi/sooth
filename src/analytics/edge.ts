@@ -3,34 +3,44 @@
  * Metrics: Gross PnL, Net PnL after gas, Win rate, Average edge, Realized edge, Drawdown,
  * Gas cost, Execution quality, Adverse selection.
  * If 0 real fills, return insufficient-data, not fabricated numbers.
- * Tags: LIVE_ONCHAIN for fills/positions, DERIVED for computed, HISTORICAL for edge-at-decision captured at tick.
+ * Tags: LIVE_ONCHAIN for fills/positions/settlement, HISTORICAL for edge-at-decision captured at
+ * tick and for the snapshot mid history joined per fill (adverse selection), DERIVED for computed.
  */
 
 import type Database from "better-sqlite3";
-import { getTotalRealizedPnL, listBotFills, getBotPositions } from "../snapshots/db.js";
+import { getTotalRealizedPnL, listBotFills, getBotPositions, closestSnapshotMid } from "../snapshots/db.js";
+import { ADVERSE_SELECTION_CONFIG } from "../config.js";
 
 export interface EdgeMetrics {
   // DERIVED
   readonly grossPnL: number; // tUSDC, sum realizedPnL from bot_positions
   readonly gasCost: number; // tUSDC, sum gasCost from bot_fills where recorded (LIVE_ONCHAIN gasUsed*gasPrice)
   readonly netPnL: number; // gross - gasCost
-  readonly winRate: number | null; // wins/trades, null if no edge-determinable wins
-  readonly tradeCount: number;
-  readonly winningTrades: number | null;
-  readonly losingTrades: number | null;
+  readonly winRate: number | null; // winningTrades / resolvedTrades, null while no position is realized (CLOSED)
+  readonly tradeCount: number; // number of fill records
+  readonly winningTrades: number | null; // closed positions with cumulative realizedPnL > 0
+  readonly losingTrades: number | null; // closed positions with cumulative realizedPnL < 0
+  readonly resolvedTrades: number; // closed positions (SETTLEMENT or EARLY_CLOSE) that resolved win-or-loss
+  readonly openPositions: number; // still-unrealized positions (excluded from win rate)
   readonly averageEdge: number | null; // mean edgeAtDecision for fills where captured (HISTORICAL)
-  readonly realizedEdge: number | null; // avg PnL per trade vs avg edge — null if not computable (needs winningOutcome which we don't have until settlement, so report gap)
+  readonly realizedEdge: number | null; // mean realized PnL per closed position (tUSDC, DERIVED from real settlement/early-close data)
   readonly maximumDrawdown: number | null; // Stage 4's peak-to-trough logic over cumulative realized PnL series — null when series unavailable, reason in gaps[]
   readonly executionQuality: number | null; // avg (fillPrice - midAtDecision) for fills where both present
-  readonly adverseSelection: number | null; // null — not computable from captured data (see gaps[])
+  readonly adverseSelection: number | null; // mean (fillPrice - postFillMid) signed by side over fills with a real nearby snapshot; null when none computable
   readonly insufficientDataReason: string | null;
-  /** Per STOP CONDITIONS: every metric that could not be computed, with the data reason. Never backfilled. */
+  /** Per STOP CONDITIONS: every metric that could not be computed for SOME of the data, with the data reason. Never backfilled. */
   readonly gaps: string[];
 }
 
 export interface EdgeAnalyticsResult {
   readonly status: "ok" | "insufficient_data";
-  readonly dataIntegrity: { fills: "LIVE_ONCHAIN"; positions: "LIVE_ONCHAIN"; edgeAtDecision: "HISTORICAL"; computed: "DERIVED" };
+  readonly dataIntegrity: {
+    fills: "LIVE_ONCHAIN";
+    positions: "LIVE_ONCHAIN";
+    edgeAtDecision: "HISTORICAL";
+    snapshots: "HISTORICAL";
+    computed: "DERIVED";
+  };
   readonly metrics: EdgeMetrics | null;
   readonly fillsCount: number;
   readonly positionsCount: number;
@@ -52,26 +62,35 @@ interface FillObservedPnlSeriesPoint {
 }
 
 /**
- * Cumulative realized PnL time series from persisted FILL_OBSERVED bot_events
- * (`data.newRealizedPnL` recorded by the runner at each fill). This is real captured
- * data, not reconstructed. Parse failures are pushed into `gaps`, never silently dropped.
+ * Cumulative realized PnL time series from persisted bot_events.
+ * Stage 7's runner recorded FILL_OBSERVED with `data.newRealizedPnL`; Stage 9's settlement poller
+ * records SETTLEMENT_REALIZED with `data.cumulativeRealizedPnL`. Both are real captured data.
+ * We read both event types and normalize to a single series — parse failures go to `gaps`.
  */
 function readRealizedPnlSeries(db: Database.Database, gaps: string[]): FillObservedPnlSeriesPoint[] {
-  const rows = db.prepare("SELECT id, data FROM bot_events WHERE eventType='FILL_OBSERVED' ORDER BY id ASC").all() as Array<{ id: number; data: string }>;
+  const rows = db
+    .prepare(
+      "SELECT id, eventType, data FROM bot_events WHERE eventType IN ('FILL_OBSERVED','SETTLEMENT_REALIZED') ORDER BY id ASC",
+    )
+    .all() as Array<{ id: number; eventType: string; data: string }>;
   const series: FillObservedPnlSeriesPoint[] = [];
   for (const row of rows) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(row.data);
     } catch (err) {
-      gaps.push(`bot_events id=${row.id} FILL_OBSERVED data unparseable, excluded from PnL series: ${(err as Error).message}`);
+      gaps.push(`bot_events id=${row.id} ${row.eventType} data unparseable, excluded from PnL series: ${(err as Error).message}`);
       continue;
     }
-    const pnl = (parsed as { newRealizedPnL?: unknown } | null)?.newRealizedPnL;
-    if (typeof pnl === "number" && Number.isFinite(pnl)) {
-      series.push({ eventId: row.id, cumulativeRealizedPnL: pnl });
+    const obj = parsed as Record<string, unknown> | null;
+    // Stage 7: FILL_OBSERVED { newRealizedPnL }, Stage 9: SETTLEMENT_REALIZED { cumulativeRealizedPnL } or FILL_OBSERVED { newRealizedPnL }
+    const raw = obj?.newRealizedPnL ?? obj?.cumulativeRealizedPnL ?? (obj?.positionUpdate as Record<string, unknown> | undefined)?.newRealizedPnL;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      series.push({ eventId: row.id, cumulativeRealizedPnL: raw });
+      continue;
     }
-    // events without newRealizedPnL (e.g. raw-topic decode path) carry no PnL point — expected, not a gap
+    // Also handle nested positionUpdate.result.cumulative? No, we already handled top-level.
+    // Events without a PnL point (e.g. raw-topic FILL_OBSERVED without fill) are expected — not a gap.
   }
   return series;
 }
@@ -101,7 +120,7 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   if (fillsCount === 0) {
     return {
       status: "insufficient_data",
-      dataIntegrity: { fills: "LIVE_ONCHAIN", positions: "LIVE_ONCHAIN", edgeAtDecision: "HISTORICAL", computed: "DERIVED" },
+      dataIntegrity: { fills: "LIVE_ONCHAIN", positions: "LIVE_ONCHAIN", edgeAtDecision: "HISTORICAL", snapshots: "HISTORICAL", computed: "DERIVED" },
       metrics: null,
       fillsCount,
       positionsCount,
@@ -149,16 +168,26 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
     gaps.push("executionQuality: no fill has both fillPrice and midAtDecision recorded");
   }
 
-  // Win rate / realized edge: require per-fill realized P&L outcome. The Stage 6 runner does not
-  // compute realized PnL from real fills (updatePositionFromFill keeps the existing realizedPnL —
-  // see runner.ts "realizedPnL not computed from fillPrice vs market"), and winningOutcome is
-  // unknown until settlement. Per STOP CONDITIONS this is reported as a gap, never backfilled.
-  const winRate: number | null = null;
-  const winningTrades: number | null = null;
-  const losingTrades: number | null = null;
-  const realizedEdge: number | null = null;
-  gaps.push("winRate/winningTrades/losingTrades: per-fill realized P&L is not computed by the runner for real fills and winningOutcome is unknown pre-settlement — not computable from captured data");
-  gaps.push("realizedEdge: needs actual outcome P&L per trade vs edgeAtDecision — same missing data as winRate");
+  // Win rate / realized edge (Stage 9): from REAL per-position realized P&L. A resolved "trade" is a
+  // position lifecycle built by buy fills and realized exactly once by either SETTLEMENT (market
+  // resolved/voided on-chain → Stage 4 payout formula) or EARLY_CLOSE (exited by an opposite-side
+  // fill before settlement). Only status CLOSED positions count — never-guessed for open ones.
+  const closedPositions = positions.filter((p) => p.status === "CLOSED");
+  const openPositions = positions.filter((p) => p.status === "OPEN");
+  const winningTrades = closedPositions.filter((p) => p.realizedPnL > 0).length;
+  const losingTrades = closedPositions.filter((p) => p.realizedPnL < 0).length;
+  const resolvedTrades = winningTrades + losingTrades; // CLOSED with exactly 0 realized P&L is a scratch: neither win nor loss
+  const winRate = resolvedTrades > 0 ? winningTrades / resolvedTrades : null;
+  const realizedEdge = closedPositions.length > 0 ? closedPositions.reduce((a, p) => a + p.realizedPnL, 0) / closedPositions.length : null;
+  if (closedPositions.length === 0) {
+    const openDesc =
+      openPositions.length === 0
+        ? "no positions exist — no fill has been applied to the position model"
+        : `${openPositions.length} open position(s) still unrealized (cost basis built, no SETTLEMENT/EARLY_CLOSE realized yet)`;
+    gaps.push(`winRate/winningTrades/losingTrades/realizedEdge: ${openDesc} — wins/losses only derivable from realized (CLOSED) positions`);
+  } else if (openPositions.length > 0) {
+    gaps.push(`winRate/winningTrades/losingTrades/realizedEdge: computed over ${closedPositions.length} closed position(s); ${openPositions.length} open position(s) excluded (still unrealized)`);
+  }
 
   // Drawdown: Stage 4's peak-to-trough over the cumulative realized PnL series recorded in
   // FILL_OBSERVED events (real captured data). Null + gap when no series points exist.
@@ -168,11 +197,39 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
     gaps.push("maximumDrawdown: no FILL_OBSERVED event carries newRealizedPnL — cumulative PnL series unavailable");
   }
 
-  // Adverse selection: mid movement against the position shortly after fill requires the
-  // post-fill mid (e.g. t+5m) linked per fill. Only the at-decision mid is stored per fill;
-  // the generic snapshots table is not joined per fill. Reported as a gap, not approximated.
-  const adverseSelection: number | null = null;
-  gaps.push("adverseSelection: post-fill mid (t+5m) per fill is not captured — only midAtDecision is stored; not computable without approximating");
+  // Adverse selection (Stage 9): per real fill, find the closest real snapshot mid to
+  // fill_time + LOOKAHEAD for the same marketId from snapshots.db. A snapshot within
+  // ±MAX_DEVIATION counts; otherwise that specific fill is reported NOT COMPUTABLE — no
+  // interpolation. Sign: positive = mid moved against our side after the fill (bought high/sold low).
+  const lookahead = ADVERSE_SELECTION_CONFIG.LOOKAHEAD_SECONDS;
+  const maxDev = ADVERSE_SELECTION_CONFIG.MAX_DEVIATION_SECONDS;
+  let adverseSamples = 0;
+  let adverseSum = 0;
+  for (const f of fills) {
+    if (f.side === null || f.outcome === null) {
+      gaps.push(`adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…): side/outcome not recorded (predates Stage 9 or raw-topic decode) — not computable`);
+      continue;
+    }
+    if (f.fillPrice === null || !Number.isFinite(f.fillPrice) || !(f.capturedAtUnix > 0)) {
+      gaps.push(`adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…): no fillPrice/capturedAt recorded — not computable`);
+      continue;
+    }
+    const target = f.capturedAtUnix + lookahead;
+    const snap = closestSnapshotMid(db, f.marketId, target, maxDev);
+    if (snap === null) {
+      gaps.push(
+        `adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…, marketId=${f.marketId}): no snapshot within ±${maxDev}s of fill+${lookahead}s (fill time ${new Date(f.capturedAtUnix * 1000).toISOString()}) — NOT COMPUTABLE, no interpolation`,
+      );
+      continue;
+    }
+    const sign = f.side === "buy" ? 1 : -1;
+    adverseSum += (f.fillPrice - snap.mid) * sign;
+    adverseSamples += 1;
+  }
+  const adverseSelection = adverseSamples > 0 ? adverseSum / adverseSamples : null;
+  if (adverseSelection === null) {
+    gaps.push(`adverseSelection: no fill has a computable post-fill mid (needs a real snapshot within ±${maxDev}s of fill+${lookahead}s) — see per-fill reasons above`);
+  }
 
   const metrics: EdgeMetrics = {
     grossPnL,
@@ -182,6 +239,8 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
     tradeCount: fillsCount,
     winningTrades,
     losingTrades,
+    resolvedTrades,
+    openPositions: openPositions.length,
     averageEdge,
     realizedEdge,
     maximumDrawdown,
@@ -194,7 +253,7 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   // If we have fills but critical fields are all null, still return ok with nulls and gap strings (per stop condition: report gap rather than backfill)
   return {
     status: "ok",
-    dataIntegrity: { fills: "LIVE_ONCHAIN", positions: "LIVE_ONCHAIN", edgeAtDecision: "HISTORICAL", computed: "DERIVED" },
+    dataIntegrity: { fills: "LIVE_ONCHAIN", positions: "LIVE_ONCHAIN", edgeAtDecision: "HISTORICAL", snapshots: "HISTORICAL", computed: "DERIVED" },
     metrics,
     fillsCount,
     positionsCount,

@@ -18,7 +18,8 @@ import { edgeThresholdStrategy } from "../strategy/edgeThreshold.js";
 import { runPipeline } from "../strategy/pipeline.js";
 import type { BotConfig, StrategyContext } from "../strategy/types.js";
 import { ANALYSIS_CONFIG, SNAPSHOT_CONFIG } from "../config.js";
-import { openSnapshotDb, getTotalRealizedPnL, getBotPositions, insertBotFill, upsertBotPosition, getBotPosition } from "../snapshots/db.js";
+import { openSnapshotDb, getTotalRealizedPnL, getBotPositions, getBotPosition, insertBotFill, type FillSide, type PositionSide } from "../snapshots/db.js";
+import { applyFillToPosition } from "./positions.js";
 import { logEvent } from "./events.js";
 import { loadPersistedConfig, savePersistedConfig, type PersistedBotConfig } from "./config.js";
 import { checkMidMove } from "./midMove.js";
@@ -50,7 +51,7 @@ export class BotRunner {
   private orderState = createOrderState();
   private stopping = false;
   private ecFactory: ((withSigner: boolean) => EcContext) | null = null;
-  private pendingOrderMeta = new Map<string, { edgeAtDecision: number; midAtDecision: number | null; gasUsed: string | null; gasPrice: string | null }>();
+  private pendingOrderMeta = new Map<string, { edgeAtDecision: number; midAtDecision: number | null; gasUsed: string | null; gasPrice: string | null; side: FillSide; outcome: PositionSide }>();
 
   constructor(opts: RunnerOptions & { ecFactory?: (withSigner: boolean) => EcContext } = {}) {
     const dbPath = opts.dbPath ?? SNAPSHOT_CONFIG.DB_PATH;
@@ -399,6 +400,10 @@ export class BotRunner {
             midAtDecision: mid,
             gasUsed: String(pr.gasUsed ?? ""),
             gasPrice: null,
+            // Stage 5 pipeline always BUYS the decided outcome (see pipeline.ts side:"buy") — the
+            // fill's side/outcome come from OUR order, not the OrderFilled log (which has no side).
+            side: "buy",
+            outcome: decision.side as PositionSide,
           });
         }
         logEvent(this.db, {
@@ -510,8 +515,10 @@ export class BotRunner {
             if (exists) continue;
             insertBotFill(this.db, { txHash, blockNumber, marketId, symbol, rawData: l });
             logEvent(this.db, { marketId, symbol, eventType: "FILL_OBSERVED", data: { txHash, blockNumber, rawLog: l, source: "raw topic" }, blockNumber });
-            // Update position: naive +1 per fill (fill qty unknown from raw decode without ABI)
-            this.updatePositionFromFill(marketId, symbol, 1, 0);
+            // Raw-topic fallback has no ABI-decoded qty/price/side/outcome — the position model
+            // refuses to guess, so this fill is recorded as-is and the position is NOT updated.
+            // Real fill paths (decoded OrderFilled matching one of our orders) carry side/outcome.
+            this.applyPositionFromFill({ marketId, symbol, side: null, outcome: null, quantityFilled: 1, fillPrice: null });
           }
           continue;
         }
@@ -529,12 +536,19 @@ export class BotRunner {
           const gasUsed = pending?.gasUsed ?? null;
           const gasPrice = pending?.gasPrice ?? null;
           const gasCost = gasUsed && gasPrice ? Number(BigInt(gasUsed) * BigInt(gasPrice)) / 1e18 : null;
-          insertBotFill(this.db, {
+          // Side/outcome come from OUR placed order (OrderFilled has no side). null when the fill
+          // does not match one of our tracked orders — such fills are recorded but not applied to
+          // positions (can't classify side/outcome without guessing).
+          const side = pending?.side ?? null;
+          const outcome = pending?.outcome ?? null;
+          const fillId = insertBotFill(this.db, {
             txHash,
             blockNumber,
             marketId,
             symbol,
             orderId: String(args?.takerOrderId ?? args?.makerOrderId ?? ""),
+            side,
+            outcome,
             quantityFilled: qty,
             fillPrice: price,
             edgeAtDecision,
@@ -544,52 +558,119 @@ export class BotRunner {
             gasCost,
             rawData: l,
           });
-          logEvent(this.db, { marketId, symbol, eventType: "FILL_OBSERVED", data: { txHash, blockNumber, args, qty, price, edgeAtDecision, midAtDecision, gasUsed, gasPrice, gasCost }, blockNumber });
-          this.updatePositionFromFill(marketId, symbol, qty, price);
+          logEvent(this.db, { marketId, symbol, eventType: "FILL_OBSERVED", data: { txHash, blockNumber, args, qty, price, side, outcome, edgeAtDecision, midAtDecision, gasUsed, gasPrice, gasCost }, blockNumber });
+          this.applyPositionFromFill({ marketId, symbol, side, outcome, quantityFilled: qty, fillPrice: price, fillId });
           // Clean up pending after fill observed
           if (pending) {
             this.pendingOrderMeta.delete(String(args?.makerOrderId ?? ""));
             this.pendingOrderMeta.delete(String(args?.takerOrderId ?? ""));
           }
         }
-      } catch {
-        // per-market log fetch failure — don't crash loop
+      } catch (err) {
+        // per-market log fetch failure — log it, don't crash the loop; fills will be re-scanned next tick
+        logEvent(this.db, {
+          marketId,
+          symbol,
+          eventType: "FILL_OBSERVED",
+          data: { error: `pollFills getLogs failed for ${symbol}: ${(err as Error).message}` },
+          blockNumber: Number(toBlock),
+        });
       }
     }
     this.lastFillBlock = toBlock;
   }
 
-  private updatePositionFromFill(marketId: string, symbol: string, quantityFilled: number, _fillPrice: number | null): void {
-    const existing = getBotPosition(this.db, marketId);
-    const net = (existing?.netPosition ?? 0) + quantityFilled;
-    // For demo, realizedPnL not computed from fillPrice vs market — keep 0, rely on manual loss injection for auto-stop test
-    const realizedPnL = existing?.realizedPnL ?? 0;
-    upsertBotPosition(this.db, { marketId, symbol, netPosition: net, realizedPnL });
+  /** Apply a real (or simulated) fill to the position model — cost basis on buys, EARLY_CLOSE on sells. */
+  private applyPositionFromFill(input: {
+    marketId: string;
+    symbol: string;
+    side: FillSide | null;
+    outcome: PositionSide | null;
+    quantityFilled: number;
+    fillPrice: number | null;
+    fillId?: number | null;
+  }): void {
+    const { marketId, symbol } = input;
+    if (input.side === null || input.outcome === null || input.fillPrice === null) {
+      logEvent(this.db, {
+        marketId,
+        symbol,
+        eventType: "FILL_OBSERVED",
+        data: {
+          positionUpdate: {
+            skipped: true,
+            reason: `fill has no decoded side/outcome/price (side=${String(input.side)}, outcome=${String(input.outcome)}, price=${String(input.fillPrice)}) — position NOT updated, would require guessing`,
+          },
+        },
+      });
+      return;
+    }
+    const result = applyFillToPosition(this.db, {
+      marketId,
+      symbol,
+      side: input.side,
+      outcome: input.outcome,
+      quantityFilled: input.quantityFilled,
+      fillPrice: input.fillPrice,
+      fillId: input.fillId,
+    });
+    if (result.kind === "error") {
+      logEvent(this.db, {
+        marketId,
+        symbol,
+        eventType: "FILL_OBSERVED",
+        data: { positionUpdate: { error: result.reason, quantityFilled: input.quantityFilled }, fillSide: input.side, outcome: input.outcome },
+      });
+      return;
+    }
+    const updated = getBotPosition(this.db, marketId);
+    const newRealizedPnL = updated?.realizedPnL ?? 0;
     logEvent(this.db, {
       marketId,
       symbol,
       eventType: "FILL_OBSERVED",
-      data: { positionUpdate: { marketId, symbol, netPosition: net, quantityFilled, note: "position updated from OrderFilled event (LIVE_ONCHAIN)" } },
+      data: {
+        newRealizedPnL,
+        cumulativeRealizedPnL: newRealizedPnL,
+        positionUpdate: {
+          marketId,
+          symbol,
+          result,
+          note: "position cost basis / EARLY_CLOSE realization from OrderFilled event (LIVE_ONCHAIN fills → DERIVED basis)",
+        },
+      },
     });
   }
 
-  /** For tests: simulate a fill to trigger position/loss update without on-chain logs. */
+  /**
+   * For tests: simulate a real fill through the SAME position model used for live data — builds
+   * cost basis on buys, realizes EARLY_CLOSE P&L on sells. P&L is COMPUTED, never passed in.
+   */
   simulateFill(
     marketId: string,
     symbol: string,
     quantityFilled: number,
-    fillPrice: number | null,
-    realizedPnLDelta: number,
-    opts?: { edgeAtDecision?: number | null; midAtDecision?: number | null; gasUsed?: string | null; gasPrice?: string | null; gasCost?: number | null },
-  ): void {
+    fillPrice: number,
+    opts?: {
+      side?: FillSide;
+      outcome?: PositionSide;
+      edgeAtDecision?: number | null;
+      midAtDecision?: number | null;
+      gasUsed?: string | null;
+      gasPrice?: string | null;
+      gasCost?: number | null;
+    },
+  ): number {
     const txHash = `0x${"a".repeat(64)}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const blockNumber = 999_999_999;
-    insertBotFill(this.db, {
+    const fillId = insertBotFill(this.db, {
       txHash,
       blockNumber,
       marketId,
       symbol,
       orderId: "test",
+      side: opts?.side ?? "buy",
+      outcome: opts?.outcome ?? "YES",
       quantityFilled,
       fillPrice,
       edgeAtDecision: opts?.edgeAtDecision ?? null,
@@ -599,17 +680,35 @@ export class BotRunner {
       gasCost: opts?.gasCost ?? null,
       rawData: { simulated: true },
     });
-    const existing = getBotPosition(this.db, marketId);
-    const net = (existing?.netPosition ?? 0) + quantityFilled;
-    const realizedPnL = (existing?.realizedPnL ?? 0) + realizedPnLDelta;
-    upsertBotPosition(this.db, { marketId, symbol, netPosition: net, realizedPnL });
+    this.applyPositionFromFill({
+      marketId,
+      symbol,
+      side: opts?.side ?? "buy",
+      outcome: opts?.outcome ?? "YES",
+      quantityFilled,
+      fillPrice,
+      fillId,
+    });
+    const pos = getBotPosition(this.db, marketId);
     logEvent(this.db, {
       marketId,
       symbol,
       eventType: "FILL_OBSERVED",
-      data: { simulated: true, quantityFilled, fillPrice, realizedPnLDelta, newNet: net, newRealizedPnL: realizedPnL, edgeAtDecision: opts?.edgeAtDecision ?? null, midAtDecision: opts?.midAtDecision ?? null },
+      data: {
+        simulated: true,
+        quantityFilled,
+        fillPrice,
+        side: opts?.side ?? "buy",
+        outcome: opts?.outcome ?? "YES",
+        newNet: pos?.netPosition ?? 0,
+        newRealizedPnL: pos?.realizedPnL ?? 0,
+        newStatus: pos?.status ?? "OPEN",
+        edgeAtDecision: opts?.edgeAtDecision ?? null,
+        midAtDecision: opts?.midAtDecision ?? null,
+      },
       blockNumber,
     });
+    return fillId;
   }
 
   close(): void {

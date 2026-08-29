@@ -22,7 +22,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createExchange } from "@dreamdex-bot-kit/ec-core";
-import { openSnapshotDb, upsertBotPosition, insertBotFill, type PositionSide } from "../snapshots/db.js";
+import { openSnapshotDb, upsertBotPosition, insertBotFill, insertBotEvent, type PositionSide } from "../snapshots/db.js";
 import { applyFillToPosition } from "../bot/positions.js";
 import { SNAPSHOT_CONFIG } from "../config.js";
 import { createEcSettlementResolver, runSettlementPoll } from "../bot/settlementPoller.js";
@@ -53,21 +53,19 @@ async function main(): Promise<void> {
   // ── 2. Copy REAL snapshot history into a TEMP db (never write the real bot tables) ───────────────
   const tmpPath = path.join(os.tmpdir(), `stage9-verify-${Date.now()}.db`);
   const tmpDb = openSnapshotDb(tmpPath);
-  const snapshotMarket = realDb.prepare("SELECT marketId, symbol, COUNT(*) cnt FROM snapshots GROUP BY marketId ORDER BY cnt DESC LIMIT 1").get() as {
-    marketId: string;
-    symbol: string;
-    cnt: number;
-  };
+  // Copy ALL real snapshots (not just one market) so every synthetic marketId has history for adverse selection.
+  // The previous single-market copy caused join mismatches when synthetic fills used a different marketId.
   tmpDb.prepare("ATTACH DATABASE ? AS realdb").run(SNAPSHOT_CONFIG.DB_PATH);
   const copiedRows = tmpDb
     .prepare(
       `INSERT INTO snapshots (marketId, symbol, capturedAtUnix, capturedAtIso, bidLevels, askLevels, mid, bidDepth, askDepth, imbalance, blockNumber)
-       SELECT marketId, symbol, capturedAtUnix, capturedAtIso, bidLevels, askLevels, mid, bidDepth, askDepth, imbalance, blockNumber FROM realdb.snapshots WHERE marketId=?`,
+       SELECT marketId, symbol, capturedAtUnix, capturedAtIso, bidLevels, askLevels, mid, bidDepth, askDepth, imbalance, blockNumber FROM realdb.snapshots`,
     )
-    .run(snapshotMarket.marketId);
+    .run();
   tmpDb.prepare("DETACH DATABASE realdb").run();
+  const distinctMarkets = (tmpDb.prepare("SELECT COUNT(DISTINCT marketId) c FROM snapshots").get() as { c: number }).c;
   console.log(
-    `[SNAPSHOTS] copied ${copiedRows.changes} REAL rows for ${snapshotMarket.symbol} (${snapshotMarket.marketId.slice(0, 10)}…) into temp db ${tmpPath} — real mid history for adverse selection`,
+    `[SNAPSHOTS] copied ${copiedRows.changes} REAL rows for ${distinctMarkets} distinct market(s) into temp db ${tmpPath} — real mid history for adverse selection (all markets, not just one)`,
   );
 
   // ── 3. REAL settled markets from the indexer + on-chain, then SYNTHETIC positions ─────────────────
@@ -157,6 +155,34 @@ async function main(): Promise<void> {
   const ec = openForEC.length >= 2 ? openForEC[1] : openForEC.length === 1 ? openForEC[0] : null;
   if (ec) {
     const exitPrice = clampProb(ec.entryPrice + 0.05);
+    // Pick a real snapshot for this marketId to anchor adverse selection: fill at snapshotTime-300, snapshot at fill+300
+    const anchorSnap = realDb
+      .prepare("SELECT capturedAtUnix, mid FROM snapshots WHERE marketId=? AND mid IS NOT NULL ORDER BY capturedAtUnix DESC LIMIT 1")
+      .get(ec.marketId) as { capturedAtUnix: number; mid: number } | undefined;
+    const fillCapturedAtUnix = anchorSnap ? anchorSnap.capturedAtUnix - 300 : Math.floor(Date.now() / 1000) - 300;
+    const syntheticEdge = 0.025; // HISTORICAL edge at decision, for averageEdge
+    const syntheticMid = anchorSnap?.mid ?? 0.5; // HISTORICAL mid at decision
+    // Ensure a real snapshot exists at fill+300 for this marketId (adverse selection needs it)
+    if (anchorSnap) {
+      // The anchorSnap itself is at fill+300, so it already satisfies the 5m lookahead within ±120s
+      // No extra insert needed — we copied all real snapshots, so this anchor is in tmpDb.
+    } else {
+      // No real snapshot for this marketId — insert a synthetic one at fill+300 so adverse selection is computable
+      const { insertSnapshot } = await import("../snapshots/db.js");
+      insertSnapshot(tmpDb, {
+        marketId: ec.marketId,
+        symbol: ec.symbol,
+        capturedAtUnix: fillCapturedAtUnix + 300,
+        capturedAtIso: new Date((fillCapturedAtUnix + 300) * 1000).toISOString(),
+        bidLevels: [[syntheticMid - 0.01, 100]],
+        askLevels: [[syntheticMid + 0.01, 100]],
+        mid: syntheticMid + 0.02, // drift 2 cents for adverse selection demo
+        bidDepth: 100,
+        askDepth: 100,
+        imbalance: 0,
+        blockNumber: 9999,
+      });
+    }
     const fillId = insertBotFill(tmpDb, {
       txHash: `0x${"e".repeat(64)}`,
       blockNumber: 999,
@@ -167,6 +193,9 @@ async function main(): Promise<void> {
       outcome: ec.side,
       quantityFilled: SIZE_PER_POSITION,
       fillPrice: exitPrice,
+      capturedAtUnix: fillCapturedAtUnix,
+      edgeAtDecision: syntheticEdge,
+      midAtDecision: syntheticMid,
       rawData: { simulated: true, tag: "SYNTHETIC early-close verification" },
     });
     // insertBotFill only persists the row — realization happens here via the SAME engine the bot
@@ -188,6 +217,15 @@ async function main(): Promise<void> {
     };
     earlyCloseSaved = { marketId: ec.marketId, symbol: ec.symbol, ...closedByFill };
     const delta = fillResult.kind === "error" ? 0 : fillResult.realizedPnLDelta;
+    // For maximumDrawdown: log a proper FILL_OBSERVED with newRealizedPnL so the analytics series sees this early-close realization.
+    // Stage 7's drawdown calc depends on FILL_OBSERVED newRealizedPnL; Stage 9's settlement path already logs SETTLEMENT_REALIZED which we now also read.
+    insertBotEvent(tmpDb, {
+      marketId: ec.marketId,
+      symbol: ec.symbol,
+      eventType: "FILL_OBSERVED",
+      data: { newRealizedPnL: closedByFill.realizedPnL, cumulativeRealizedPnL: closedByFill.realizedPnL, fillId, realizedPnLDelta: delta, positionUpdate: { marketId: ec.marketId, symbol: ec.symbol, result: fillResult } },
+      blockNumber: 999,
+    });
     console.log(
       `\n[EARLY_CLOSE] SYNTHETIC sell ${ec.side} ${SIZE_PER_POSITION} @${exitPrice.toFixed(4)} (fill id=${fillId}) → applyFillToPosition=${fillResult.kind}${fillResult.kind === "error" ? ` (${fillResult.reason})` : ""} realizedPnLDelta=${delta.toFixed(4)} → status=${closedByFill.status} source=${String(closedByFill.realizationSource)} cumulativeRealizedPnL=${closedByFill.realizedPnL.toFixed(4)}`,
     );

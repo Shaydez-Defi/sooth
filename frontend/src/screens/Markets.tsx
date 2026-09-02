@@ -303,9 +303,7 @@ export default function SoothMarkets() {
         .sooth-th:hover { color: ${COLOR.text}; }
         .sooth-row { transition: background 150ms ${EASE}; cursor: pointer; }
         .sooth-search:focus { border-color: ${COLOR.accent} !important; }
-        @keyframes sooth-live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .sooth-live-dot { animation: sooth-live-pulse 2s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .sooth-live-dot { animation: none !important; } }
+        .sooth-live-dot { opacity: 1; }
         @media (max-width: 900px) { .sooth-markets-grid { grid-template-columns: 1fr !important; } }
         @media (max-width: 800px) {
           .sooth-table-head { display: none !important; }

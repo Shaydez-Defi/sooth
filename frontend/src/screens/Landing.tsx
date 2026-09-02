@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Original palette from sooth-landing-full-v7.jsx - preserved byte-for-byte, not unified
 const COLOR = {
@@ -39,7 +39,7 @@ const AUTOMATION_CMDS: Array<{ cmd: string; detail: string }> = [
   { cmd: "monitor", detail: "Watch it run, or stop it the moment a rule is violated." },
 ];
 
-function EcosystemLayers({ reducedMotion }: { reducedMotion: boolean }) {
+function EcosystemLayers() {
   const size = 320;
   const cx = size / 2;
   const cy = size / 2;
@@ -51,12 +51,9 @@ function EcosystemLayers({ reducedMotion }: { reducedMotion: boolean }) {
   ];
   return (
     <div style={{ position: "relative", width: size, height: size }}>
-      {!reducedMotion && (
-        <div
-          className="sooth-radar-sweep"
-          style={{ position: "absolute", inset: 0, borderRadius: "50%", background: `conic-gradient(from 0deg, ${COLOR.accent}55, transparent 70deg, transparent 360deg)` }}
-        />
-      )}
+      <div
+        style={{ position: "absolute", inset: 0, borderRadius: "50%", background: `conic-gradient(from 0deg, ${COLOR.accent}55, transparent 70deg, transparent 360deg)`, opacity: 0.7 }}
+      />
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: "relative" }}>
         <defs>
           <radialGradient id="sooth-radar-glow" cx="50%" cy="50%" r="50%">
@@ -101,11 +98,11 @@ const FAQS: Array<{ q: string; a: string }> = [
   { q: "What network is this on?", a: "Sooth is built on Somnia and trades through DreamDEX's on-chain CLOB. It's currently live on testnet." },
 ];
 
-function GlowingOrb({ size = 200, reducedMotion }: { size?: number; reducedMotion: boolean }) {
+function GlowingOrb({ size = 200 }: { size?: number }) {
   const glowSize = size * 1.8;
   return (
     <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <svg width={glowSize} height={glowSize} viewBox="0 0 200 200" className={reducedMotion ? "" : "sooth-orb-breathe"} style={{ position: "absolute", inset: `${-(glowSize - size) / 2}px` }}>
+      <svg width={glowSize} height={glowSize} viewBox="0 0 200 200" style={{ position: "absolute", inset: `${-(glowSize - size) / 2}px` }}>
         <defs>
           <radialGradient id="sooth-orb-glow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor={COLOR.accent} stopOpacity="0.35" />
@@ -115,7 +112,7 @@ function GlowingOrb({ size = 200, reducedMotion }: { size?: number; reducedMotio
         </defs>
         <circle cx="100" cy="100" r="100" fill="url(#sooth-orb-glow)" />
       </svg>
-      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className={reducedMotion ? "" : "sooth-orb-sweep"} style={{ position: "relative" }}>
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ position: "relative" }}>
         <defs>
           <filter id="sooth-orb-core-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="1.6" />
@@ -129,29 +126,8 @@ function GlowingOrb({ size = 200, reducedMotion }: { size?: number; reducedMotio
   );
 }
 
-function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setShown(true);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.15 },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-  return (
-    <div ref={ref} className={`sooth-reveal ${shown ? "in" : ""}`} style={{ transitionDelay: `${delay}ms` }}>
-      {children}
-    </div>
-  );
+function Reveal({ children }: { children: React.ReactNode; delay?: number }) {
+  return <div>{children}</div>;
 }
 
 function SectionHeading({ eyebrow, center, children }: { eyebrow?: string; center?: boolean; children: React.ReactNode }) {
@@ -171,16 +147,7 @@ function SectionHeading({ eyebrow, center, children }: { eyebrow?: string; cente
 export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [reducedMotion, setReducedMotion] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
 
   return (
     <div style={{ background: COLOR.ink, color: COLOR.text, fontFamily: "'Manrope', system-ui, sans-serif", minHeight: "100vh" }}>
@@ -201,17 +168,7 @@ export default function Landing() {
         .sooth-btn-outline { background: transparent; color: ${COLOR.accent}; border: 1px solid ${COLOR.accent}; border-radius: 6px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 150ms ${EASE}, color 150ms ${EASE}, transform 100ms ${EASE}; }
         .sooth-btn-outline:hover { background: ${COLOR.accent}; color: ${COLOR.ink}; }
         .sooth-btn-outline:active { transform: scale(0.97); }
-        @keyframes sooth-breathe { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
-        @keyframes sooth-sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .sooth-orb-breathe { animation: sooth-breathe 4s ease-in-out infinite; }
-        .sooth-orb-sweep { animation: sooth-sweep 22s linear infinite; transform-box: fill-box; transform-origin: 50% 50%; }
-        @keyframes sooth-radar-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .sooth-radar-sweep { animation: sooth-radar-spin 6s linear infinite; }
-        .sooth-reveal { transform: translateY(14px); opacity: 0.001; transition: transform 500ms ${EASE}, opacity 500ms ${EASE}; }
-        .sooth-reveal.in { transform: translateY(0); opacity: 1; }
         @media (prefers-reduced-motion: reduce) {
-          .sooth-orb-breathe, .sooth-orb-sweep, .sooth-radar-sweep { animation: none !important; }
-          .sooth-reveal { transform: none !important; opacity: 1 !important; transition: none !important; }
           .sooth-btn-primary:active, .sooth-btn-outline:active { transform: none !important; }
         }
         .sooth-screen-card { border: 1px solid ${COLOR.border}; border-radius: 8px; padding: 16px; flex: 1 1 180px; background: ${COLOR.surface}; cursor: pointer; transition: border-color 180ms ${EASE}, transform 180ms ${EASE}, box-shadow 180ms ${EASE}; }
@@ -264,7 +221,7 @@ export default function Landing() {
 
         <section style={{ textAlign: "center", padding: "56px 0 40px" }}>
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-            <GlowingOrb size={180} reducedMotion={reducedMotion} />
+            <GlowingOrb size={180} />
           </div>
           <h1 className="sooth-hero-h1" style={{ fontSize: 52, fontWeight: 600, maxWidth: "16ch", margin: "0 auto", lineHeight: 1.1, color: COLOR.text }}>
             See what the market sees.
@@ -371,7 +328,7 @@ export default function Landing() {
         <section style={{ padding: "80px 0", borderBottom: `1px solid ${COLOR.border}` }}>
           <SectionHeading eyebrow="Built on real infrastructure">Sooth is DreamDEX&apos;s mind.</SectionHeading>
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <EcosystemLayers reducedMotion={reducedMotion} />
+            <EcosystemLayers />
           </div>
         </section>
 
@@ -538,7 +495,7 @@ export default function Landing() {
 
         <section style={{ padding: "88px 0", textAlign: "center", borderBottom: `1px solid ${COLOR.border}` }}>
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
-            <GlowingOrb size={100} reducedMotion={reducedMotion} />
+            <GlowingOrb size={100} />
           </div>
           <h2 style={{ maxWidth: "16ch", margin: "0 auto", fontSize: 32, fontWeight: 600, lineHeight: 1.2, color: COLOR.text }}>The market is speaking.</h2>
           <p style={{ maxWidth: "32ch", margin: "12px auto 0", color: COLOR.muted, fontSize: 17 }}>Sooth helps you read it.</p>

@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Radar, BarChart3, History, CheckCircle2, Activity } from "lucide-react";
-
 // Original palette from sooth-landing-full-v7.jsx — preserved byte-for-byte, not unified
 const COLOR = {
   ink: "#0A0908",
@@ -24,31 +22,21 @@ function OrbMark({ size = 32 }: { size?: number }) {
   );
 }
 
-function IllustrationDiscover() {
-  return <Radar size={40} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationAnalyze() {
-  return <BarChart3 size={40} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationBacktest() {
-  return <History size={40} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationExecute() {
-  return <CheckCircle2 size={40} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationMonitor() {
-  return <Activity size={40} color={COLOR.accent} strokeWidth={1.4} />;
-}
-const AUTOMATION_STEPS: Array<{ num: string; title: string; detail: string }> = [
-  { num: "01", title: "Create strategy", detail: "Pick momentum, mean-reversion, or a plain edge threshold." },
-  { num: "02", title: "Configure rules", detail: "Position size, loss limits, minimum liquidity — you set every bound." },
-  {
-    num: "03",
-    title: "Authorize",
-    detail: "Sooth trades from a dedicated wallet you fund separately — only what you're willing to risk. Exposure is capped by the risk engine's position and loss limits, not by unlimited access to your main funds. Event Contracts don't currently support the on-chain operator-key model that spot trading does, so Sooth enforces exposure limits in software instead.",
-  },
-  { num: "04", title: "Deploy", detail: "The bot starts reading live markets through the same pipeline." },
-  { num: "05", title: "Monitor", detail: "Watch it run, or stop it the moment a rule is violated." },
+// Terminal motif — signature for Sooth as CLI-operated system, not decorative icons
+const PIPELINE_CMDS: Array<{ cmd: string; detail: string }> = [
+  { cmd: "discover", detail: "Browse real DreamDEX Event Contracts on Somnia — live state, not simulated markets." },
+  { cmd: "analyze", detail: "Liquidity, spread, and time to expiry become a single, honest edge calculation." },
+  { cmd: "backtest", detail: "Run a strategy against historical conditions before it touches real capital." },
+  { cmd: "execute", detail: "Trade manually, or hand execution to a bot bound by the limits you set." },
+  { cmd: "monitor", detail: "Positions, fills, and P&L update from on-chain events — never estimates." },
+];
+
+const AUTOMATION_CMDS: Array<{ cmd: string; detail: string }> = [
+  { cmd: "strategy", detail: "Pick momentum, mean-reversion, or a plain edge threshold." },
+  { cmd: "rules", detail: "Position size, loss limits, minimum liquidity — you set every bound." },
+  { cmd: "authorize", detail: "Fund a dedicated wallet; risk engine caps exposure, no main-wallet access." },
+  { cmd: "deploy", detail: "The bot starts reading live markets through the same pipeline." },
+  { cmd: "monitor", detail: "Watch it run, or stop it the moment a rule is violated." },
 ];
 
 function EcosystemLayers({ reducedMotion }: { reducedMotion: boolean }) {
@@ -95,14 +83,6 @@ function EcosystemLayers({ reducedMotion }: { reducedMotion: boolean }) {
     </div>
   );
 }
-
-const PIPELINE: Array<{ Illustration: () => React.JSX.Element; title: string; detail: string }> = [
-  { Illustration: IllustrationDiscover, title: "Discover", detail: "Browse real DreamDEX Event Contracts on Somnia — live state, not simulated markets." },
-  { Illustration: IllustrationAnalyze, title: "Analyze", detail: "Liquidity, spread, and time to expiry become a single, honest edge calculation." },
-  { Illustration: IllustrationBacktest, title: "Backtest", detail: "Run a strategy against historical conditions before it touches real capital." },
-  { Illustration: IllustrationExecute, title: "Execute", detail: "Trade manually, or hand execution to a bot bound by the limits you set." },
-  { Illustration: IllustrationMonitor, title: "Monitor", detail: "Positions, fills, and P&L update from on-chain events — never estimates." },
-];
 
 const WHY_SOOTH = [
   { title: "Intelligence", detail: "Turn raw order-book data into a signal you can actually act on." },
@@ -317,12 +297,14 @@ export default function Landing() {
 
         <section id="pipeline" style={{ padding: "80px 0", borderBottom: `1px solid ${COLOR.border}` }}>
           <SectionHeading eyebrow="How it works">One pipeline, start to finish.</SectionHeading>
-          <div className="sooth-grid-2" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 40 }}>
-            {PIPELINE.map(({ Illustration, title, detail }, i) => (
-              <Reveal key={title} delay={i * 60}>
-                <Illustration />
-                <h3 style={{ fontSize: 19, fontWeight: 600, marginTop: 20, color: COLOR.text }}>{title}</h3>
-                <p style={{ fontSize: 14, color: COLOR.muted, marginTop: 8, lineHeight: 1.5 }}>{detail}</p>
+          <div style={{ maxWidth: 760 }}>
+            {PIPELINE_CMDS.map(({ cmd, detail }, i) => (
+              <Reveal key={cmd} delay={i * 40}>
+                <div style={{ display: "flex", gap: 16, padding: "14px 0 14px 16px", borderLeft: `2px solid ${COLOR.border}`, borderBottom: i < PIPELINE_CMDS.length - 1 ? `1px solid ${COLOR.border}` : "none", marginLeft: 2 }}>
+                  <span style={{ fontFamily: "monospace", fontSize: 14, color: COLOR.accent, flexShrink: 0, lineHeight: 1.6 }}>$</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text, flexShrink: 0, width: 96, lineHeight: 1.6 }}>{cmd}</span>
+                  <span style={{ fontSize: 14, color: COLOR.muted, lineHeight: 1.6 }}>{detail}</span>
+                </div>
               </Reveal>
             ))}
           </div>
@@ -370,20 +352,19 @@ export default function Landing() {
 
         <section style={{ padding: "80px 0", borderBottom: `1px solid ${COLOR.border}` }}>
           <SectionHeading eyebrow="Automation">You define the rules. Sooth executes them.</SectionHeading>
-          <div className="sooth-grid-2" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 32 }}>
-            {AUTOMATION_STEPS.map(({ num, title, detail }, i) => (
-              <Reveal key={title} delay={i * 60}>
-                <div style={{ borderTop: `2px solid ${COLOR.accent}22`, paddingTop: 16 }}>
-                  <div style={{ fontFamily: "monospace", fontSize: 28, fontWeight: 800, letterSpacing: "-0.04em", color: COLOR.accent, lineHeight: 1 }}>{num}</div>
-                  <div style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLOR.faint, marginTop: 4 }}>{String(i + 1).padStart(2, "0")} — {title.toUpperCase()}</div>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginTop: 12, color: COLOR.text, marginBottom: 0 }}>{title}</h3>
-                  <p style={{ fontSize: 13, color: COLOR.muted, marginTop: 6, lineHeight: 1.45 }}>{detail}</p>
+          <div style={{ maxWidth: 760 }}>
+            {AUTOMATION_CMDS.map(({ cmd, detail }, i) => (
+              <Reveal key={cmd} delay={i * 40}>
+                <div style={{ display: "flex", gap: 16, padding: "14px 0 14px 16px", borderLeft: `2px solid ${COLOR.border}`, borderBottom: i < AUTOMATION_CMDS.length - 1 ? `1px solid ${COLOR.border}` : "none", marginLeft: 2 }}>
+                  <span style={{ fontFamily: "monospace", fontSize: 14, color: COLOR.accent, flexShrink: 0, lineHeight: 1.6 }}>$</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text, flexShrink: 0, width: 96, lineHeight: 1.6 }}>{cmd}</span>
+                  <span style={{ fontSize: 14, color: COLOR.muted, lineHeight: 1.6 }}>{detail}</span>
                 </div>
               </Reveal>
             ))}
           </div>
-          <p style={{ maxWidth: "56ch", color: COLOR.muted, fontSize: 15, marginTop: 40, lineHeight: 1.6 }}>
-            Sooth runs from a separately funded wallet — only that balance is at risk. Event Contracts don&apos;t support an on-chain operator-key withdrawal block like spot does, so the risk engine caps exposure via position and loss limits in software.
+          <p style={{ maxWidth: "56ch", color: COLOR.muted, fontSize: 13, marginTop: 24, lineHeight: 1.6, fontFamily: "monospace" }}>
+            <span style={{ color: COLOR.faint }}>note:</span> Event Contracts don&apos;t support spot&apos;s on-chain operator-key block — Sooth caps exposure in software via the risk engine.
           </p>
         </section>
 

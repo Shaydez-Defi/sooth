@@ -58,13 +58,13 @@ function TopBar({ analysis, marketId }: { analysis: MarketAnalysis | null; marke
   const [open, setOpen] = useState(false);
   const edge = analysis ? analysis.estimatedProbability - analysis.marketProbability : 0;
   return (
-    <div className="sooth-glass-card" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+    <div className="sooth-glass-card" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
       <button className="sooth-focusable" onClick={() => setOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 14px", color: COLOR.text, fontFamily: "monospace", fontSize: 13, cursor: "pointer" }}>
         {marketId}
         <ChevronDown size={14} color={COLOR.faint} style={{ transform: open ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}` }} />
       </button>
       {analysis ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 28 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
           {[
             ["Market prob.", pct(analysis.marketProbability), COLOR.text],
             ["Sooth est.", pct(analysis.estimatedProbability), COLOR.accent],
@@ -107,14 +107,14 @@ function DepthChart({ bids, asks }: { bids: [number, number][]; asks: [number, n
   const emptyBoxStyle: React.CSSProperties = {
     border: `1px dashed ${COLOR.border}`,
     borderRadius: 6,
-    padding: "24px 12px",
+    padding: "16px 12px",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
     background: COLOR.surface2,
-    minHeight: 80,
+    minHeight: 64,
   };
   return (
     <div className="sooth-glass-card">
@@ -532,16 +532,16 @@ export default function MarketDetail() {
             <button onClick={() => void load()} className="sooth-focusable" style={{ marginTop: 10, padding: "6px 12px", borderRadius: 6, border: `1px solid ${COLOR.border}`, background: COLOR.surface2, color: COLOR.text, cursor: "pointer", fontSize: 12 }}>Retry</button>
           </div>
         )}
-        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px", display: "flex", flexDirection: "column", gap: SPACE.panel }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}>
           {!loading && analysis && (
-            <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: SPACE.panel, alignItems: "start" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: SPACE.panel }}>
+            <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.65fr) 360px", gap: 16, alignItems: "start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <TopBar analysis={analysis} marketId={marketId} />
                 <ReasoningTrace analysis={analysis} />
                 <DepthChart bids={bids} asks={asks} />
                 <ProbabilityChart marketId={marketId} analysis={analysis} />
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: SPACE.panel }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <EventLog marketId={marketId} />
                 <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} onPlaced={() => void load()} />
                 <AccountOverview />

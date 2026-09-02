@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { postAnalyze, postBacktest } from "../lib/api";
 // Original palette from sooth-landing-full-v7.jsx - preserved byte-for-byte, not unified
 const COLOR = {
   ink: "#0A0908",
@@ -148,6 +149,53 @@ export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const navigate = useNavigate();
+  const [livePreview, setLivePreview] = useState<Array<{ label: string; edge: string }>>([]);
+  const [livePreviewLoading, setLivePreviewLoading] = useState(true);
+  const [backtestStats, setBacktestStats] = useState<{ trades: number; winRate: string; avgEdge: string; maxDrawdown: string } | null>(null);
+  const [backtestLoading, setBacktestLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void postAnalyze({ all: true })
+      .then((res) => {
+        if (cancelled) return;
+        const top = [...res.data].sort((a, b) => Math.abs(b.analysis.edge) - Math.abs(a.analysis.edge)).slice(0, 3).map((d) => {
+          const e = d.analysis.edge;
+          const label = d.symbol.length > 22 ? d.symbol.slice(0, 22) + "..." : d.symbol;
+          const edge = Math.abs(e) < 0.005 ? "NO TRADE" : `${e >= 0 ? "+" : ""}${(e * 100).toFixed(1)}%`;
+          return { label, edge };
+        });
+        setLivePreview(top);
+      })
+      .catch(() => {
+        if (!cancelled) setLivePreview([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLivePreviewLoading(false);
+      });
+    void postBacktest({ limit: 50, startingCapital: 1000, sizePerTrade: 1 })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.data.metrics) {
+          const m = res.data.metrics;
+          setBacktestStats({
+            trades: m.numberOfTrades,
+            winRate: m.numberOfTrades ? `${Math.round(m.winRate * 100)}%` : "-",
+            avgEdge: `${(m.averageEdge * 100).toFixed(1)}%`,
+            maxDrawdown: `${m.maximumDrawdown.toFixed(2)}`,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBacktestStats(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBacktestLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div style={{ background: COLOR.ink, color: COLOR.text, fontFamily: "'Manrope', system-ui, sans-serif", minHeight: "100vh" }}>
@@ -274,16 +322,18 @@ export default function Landing() {
               <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, textTransform: "uppercase" }}>Market</span>
               <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, textTransform: "uppercase" }}>Edge</span>
             </div>
-            {[
-              { label: "SOMI > $1.20 by Fri", edge: "+7.0%" },
-              { label: "DreamDEX daily vol > 5M", edge: "NO TRADE" },
-              { label: "Somnia TPS > 800k (7d avg)", edge: "+3.0%" },
-            ].map((row, i, arr) => (
-              <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: i < arr.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
-                <span style={{ fontSize: 14 }}>{row.label}</span>
-                <span style={{ fontFamily: "monospace", fontSize: 13, color: row.edge === "NO TRADE" ? COLOR.faint : COLOR.accent }}>{row.edge}</span>
-              </div>
-            ))}
+            {livePreviewLoading ? (
+              <div style={{ padding: "16px", fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>Loading live markets...</div>
+            ) : livePreview.length === 0 ? (
+              <div style={{ padding: "16px", fontSize: 12, color: COLOR.faint }}>No live markets - check back after logger captures the next snapshots.</div>
+            ) : (
+              livePreview.map((row, i, arr) => (
+                <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: i < arr.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
+                  <span style={{ fontSize: 13, fontFamily: "monospace", color: COLOR.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{row.label}</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 13, color: row.edge === "NO TRADE" ? COLOR.faint : COLOR.accent, flexShrink: 0, marginLeft: 12 }}>{row.edge}</span>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
@@ -293,17 +343,23 @@ export default function Landing() {
             Sooth isn&apos;t making predictions - it&apos;s measuring whether a strategy has an exploitable edge, against real historical conditions, before any capital moves.
           </p>
           <div className="sooth-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24, maxWidth: 640 }}>
-            {[
-              ["Trades", "128"],
-              ["Win rate", "58%"],
-              ["Avg edge", "4.2%"],
-              ["Max drawdown", "-6.1%"],
-            ].map(([label, value]) => (
-              <div key={label} style={{ borderTop: `1px solid ${COLOR.border}`, paddingTop: 12 }}>
-                <div style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 600 }}>{value}</div>
-                <div style={{ fontSize: 12, color: COLOR.faint, marginTop: 4 }}>{label}</div>
-              </div>
-            ))}
+            {backtestLoading ? (
+              <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint, gridColumn: "1 / -1" }}>Loading backtest...</div>
+            ) : backtestStats ? (
+              ([
+                ["Trades", String(backtestStats.trades)],
+                ["Win rate", backtestStats.winRate],
+                ["Avg edge", backtestStats.avgEdge],
+                ["Max drawdown", backtestStats.maxDrawdown],
+              ] as Array<[string, string]>).map(([label, value]) => (
+                <div key={label} style={{ borderTop: `1px solid ${COLOR.border}`, paddingTop: 12 }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 600 }}>{value}</div>
+                  <div style={{ fontSize: 12, color: COLOR.faint, marginTop: 4 }}>{label}</div>
+                </div>
+              ))
+            ) : (
+              <div style={{ fontSize: 12, color: COLOR.faint, gridColumn: "1 / -1" }}>No backtest data yet - run a backtest in Strategy Lab.</div>
+            )}
           </div>
         </section>
 
@@ -357,8 +413,8 @@ export default function Landing() {
                     </div>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: "monospace", fontSize: 8, fontWeight: 800, letterSpacing: "0.04em", background: "#6B9E78", color: COLOR.ink, padding: "1px 4px", borderRadius: 3 }}>TRADE</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>+4.2% edge</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.accent, marginLeft: "auto" }}>2.1% spr</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>edge</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint, marginLeft: "auto" }}>live</span>
                     </div>
                   </div>
                 ),
@@ -375,8 +431,8 @@ export default function Landing() {
                       <rect x="0" y="30" width="120" height="1" fill={COLOR.border} />
                     </svg>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>48% → 63%</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78" }}>+7.0% edge</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>probability</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>live</span>
                     </div>
                   </div>
                 ),
@@ -392,9 +448,9 @@ export default function Landing() {
                       <rect x="0" y="0" width="120" height="36" fill={COLOR.accent} opacity="0.06" />
                     </svg>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.muted, borderTop: `1px solid ${COLOR.border}`, paddingTop: 2 }}>128 trades</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78" }}>58% win</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint, marginLeft: "auto" }}>4.2% avg</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>trades</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>win</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint, marginLeft: "auto" }}>avg</span>
                     </div>
                   </div>
                 ),
@@ -407,8 +463,8 @@ export default function Landing() {
                   <div style={{ height: 72, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#6B9E78", boxShadow: "0 0 6px rgba(107,158,120,0.6)", flexShrink: 0 }} />
-                      <span style={{ fontFamily: "monospace", fontSize: 9, color: COLOR.text, fontWeight: 700 }}>Bot #1 - running</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 7, color: COLOR.faint, marginLeft: "auto" }}>tick 42</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 9, color: COLOR.text, fontWeight: 700 }}>Bot - running</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 7, color: COLOR.faint, marginLeft: "auto" }}>live</span>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 2 }}>
                       <div style={{ height: 5, background: COLOR.surface, border: `1px solid ${COLOR.border}`, borderRadius: 2, width: "100%", opacity: 0.9 }} />
@@ -425,17 +481,17 @@ export default function Landing() {
                 preview: (
                   <div style={{ height: 72, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 800, color: COLOR.text }}>1,240 tUSDC</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78", background: "rgba(107,158,120,0.14)", padding: "1px 4px", borderRadius: 3 }}>+ $38.20</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 800, color: COLOR.text }}>- tUSDC</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint, border: `1px solid ${COLOR.border}`, padding: "1px 4px", borderRadius: 3 }}>-</span>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 6px", background: COLOR.surface, borderRadius: 3, border: `1px solid ${COLOR.border}` }}>
-                        <span style={{ fontSize: 8, color: COLOR.muted }}>ETH 0.8 @ 62%</span>
-                        <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78" }}>+2.1%</span>
+                        <span style={{ fontSize: 8, color: COLOR.muted }}>- @ -</span>
+                        <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>-</span>
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 6px", background: COLOR.surface, borderRadius: 3, border: `1px solid ${COLOR.border}`, opacity: 0.85 }}>
-                        <span style={{ fontSize: 8, color: COLOR.muted }}>BTC 0.4 @ 41%</span>
-                        <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>NO_TRADE</span>
+                        <span style={{ fontSize: 8, color: COLOR.muted }}>- @ -</span>
+                        <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>-</span>
                       </div>
                     </div>
                   </div>

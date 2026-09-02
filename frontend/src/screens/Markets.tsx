@@ -306,8 +306,9 @@ export default function SoothMarkets() {
             <div>Failed to load markets: {error}</div>
             {error.includes("API not reachable") && (
               <div style={{ marginTop: 6, color: COLOR.muted, fontSize: 11 }}>
-                Tip: the frontend needs the backend API on <span style={{ color: COLOR.text }}>{typeof window !== "undefined" ? (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:3000" : "http://localhost:3000"}</span>
-                . Open a second terminal and run <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code> from the repo root, then retry.
+                Tip: frontend uses vite proxy → <span style={{ color: COLOR.text }}>http://localhost:3000</span> unless{" "}
+                <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>VITE_API_BASE_URL</code> is set. Open a second terminal and run{" "}
+                <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code> from the repo root (port 3000 must stay running), then retry. In Codespaces leave <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4 }}>VITE_API_BASE_URL</code> empty.
               </div>
             )}
             <button onClick={() => void load()} style={{ marginTop: 8, background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>retry</button>

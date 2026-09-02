@@ -14,7 +14,7 @@ export type DataIntegrityTag =
   | "DERIVED (persisted)"
   | string;
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:3000";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export class ApiError extends Error {
   public readonly status: number;
@@ -38,9 +38,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch (err) {
+    const apiLabel = API_BASE || "via vite proxy → http://localhost:3000";
     const hint =
       (err as Error).message.includes("Failed to fetch") || (err as Error).message.includes("NetworkError")
-        ? ` — API not reachable at ${API_BASE}. Is the backend running? In a separate terminal run: npm run api  (from repo root, port 3000). If using a different URL, set VITE_API_BASE_URL in frontend/.env and restart vite.`
+        ? ` — API not reachable (${apiLabel}). Is the backend running? In a separate terminal run: npm run api  (from repo root, port 3000). If you need a different URL, set VITE_API_BASE_URL in frontend/.env and restart vite. In Codespaces, keep VITE_API_BASE_URL empty to use the vite proxy.`
         : "";
     throw new ApiError(`Network error fetching ${path}: ${(err as Error).message}${hint}`, 0, null, null);
   }

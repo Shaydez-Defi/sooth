@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
-import { ChevronDown, CheckCircle2, XCircle, Waypoints, ShieldHalf, ArrowLeftRight, FlagTriangleRight, Compass, Activity } from "lucide-react";
+import { ChevronDown, CheckCircle2, XCircle, Activity } from "lucide-react";
 import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, type MarketAnalysis } from "../lib/api";
 
 // Preserved verbatim from sooth-market-detail-v3.jsx - inline, not unified
@@ -89,7 +89,7 @@ function TopBar({ analysis, marketId }: { analysis: MarketAnalysis | null; marke
 function ReasoningTrace({ analysis }: { analysis: MarketAnalysis }) {
   return (
     <div className="sooth-glass-card">
-      <PanelHeader icon={Compass}>Reasoning trace - why {analysis.recommendation}</PanelHeader>
+      <PanelHeader>Reasoning trace - why {analysis.recommendation}</PanelHeader>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "6px 24px" }}>
         {analysis.reasons.map((r, i) => (
           <div key={i} style={{ display: "flex", gap: 8, fontSize: 13, color: COLOR.muted, lineHeight: 1.5 }}>
@@ -305,12 +305,19 @@ function BottomTabs({ marketId }: { marketId: string }) {
         {tab === "Bot events" && (
           <div>
             {loading && <div style={{ fontSize: 12, color: COLOR.faint }}>Loading events…</div>}
-            {!loading && (events as Array<{ id: number; eventType: string; symbol?: string; dataJson?: { reason?: string } } >).map((e, i) => (
-              <div key={e.id ?? i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: i > 0 ? `1px solid ${COLOR.border}` : "none", fontSize: 13 }}>
-                <div><span style={{ fontWeight: 600 }}>{e.eventType}</span><span style={{ color: COLOR.muted }}> - {e.symbol ?? String(e.dataJson?.reason ?? "")}</span></div>
-                <span style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint, flexShrink: 0, marginLeft: 12 }}>{String(e.id)}</span>
-              </div>
-            ))}
+            {!loading &&
+              (events as Array<{ id: number; eventType: string; symbol?: string; dataJson?: { reason?: string } }>).map((e, i) => (
+                <div key={e.id ?? i} style={{ display: "flex", gap: 10, padding: "8px 0", borderTop: i > 0 ? `1px solid ${COLOR.border}` : "none", alignItems: "flex-start" }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: COLOR.faint, flexShrink: 0, marginTop: 7, opacity: 0.7 }} aria-hidden="true" />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.text, fontWeight: 600 }}>{e.eventType.toLowerCase()}</span>
+                      <span style={{ fontSize: 12, color: COLOR.muted }}>{e.symbol ?? String(e.dataJson?.reason ?? "")}</span>
+                    </div>
+                  </div>
+                  <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, flexShrink: 0, marginLeft: 12 }}>#{String(e.id)}</span>
+                </div>
+              ))}
             {!loading && events.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No bot events yet.</div>}
           </div>
         )}
@@ -434,25 +441,28 @@ function EventLog({ marketId }: { marketId: string }) {
   useEffect(() => {
     void getBotEvents("default", { limit: 12 }).then((r) => setRows(r.data as unknown as typeof rows)).catch(() => setRows([]));
   }, [marketId]);
-  const EVENT_ICON: Record<string, typeof Waypoints> = { MARKET_EVALUATED: Waypoints, RISK_CHECK: ShieldHalf, EXECUTION: ArrowLeftRight, FILL_OBSERVED: FlagTriangleRight };
+  const dotColor = (t: string): string => {
+    if (t === "FILL_OBSERVED") return COLOR.down;
+    if (t === "EXECUTION") return COLOR.up;
+    if (t === "RISK_CHECK") return COLOR.faint;
+    return COLOR.accent;
+  };
   return (
     <div className="sooth-glass-card">
       <PanelHeader>Event log</PanelHeader>
       {rows.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No events yet.</div>}
-      {rows.map((e, i) => {
-        const Icon = EVENT_ICON[e.eventType] ?? Waypoints;
-        return (
-          <div key={e.id ?? i} style={{ display: "flex", gap: 9, padding: "8px 6px", marginLeft: -6, marginRight: -6, borderRadius: 6, borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
-            <Icon size={13} color={COLOR.muted} style={{ flexShrink: 0, marginTop: 2 }} />
-            <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: COLOR.text }}>{e.eventType} - {e.createdAtIso ? formatClock(e.createdAtIso) : ""}</p>
-              <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
-                <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{e.data.slice(0, 80)}</span>
-              </div>
+      {rows.map((e, i) => (
+        <div key={e.id ?? i} style={{ display: "flex", gap: 10, padding: "8px 6px", marginLeft: -6, marginRight: -6, borderRadius: 6, borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none", alignItems: "flex-start" }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor(e.eventType), flexShrink: 0, marginTop: 7, opacity: 0.9 }} aria-hidden="true" />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.text, fontWeight: 600, letterSpacing: "0.02em" }}>{e.eventType.toLowerCase()}</span>
+              <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{e.createdAtIso ? formatClock(e.createdAtIso) : ""}</span>
             </div>
+            <div style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.data.slice(0, 80)}</div>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }

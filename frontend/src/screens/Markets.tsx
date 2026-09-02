@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ChevronRight, ChevronUp, ChevronDown, Info, Zap, CheckCircle2, Flag, TrendingUp } from "lucide-react";
+import { Search, ChevronRight, ChevronUp, ChevronDown, Info, TrendingUp } from "lucide-react";
 import { ApiError, postAnalyze, type MarketAnalysis } from "../lib/api";
 
 // ── Preserved verbatim from sooth-markets-v3.jsx - do not unify, flagged as follow-up duplication
@@ -160,7 +160,7 @@ function SignalSummary({ markets }: { markets: EnrichedRow[] }) {
 // but markup/spacing/colors identical to sooth-markets-v3.jsx
 function ActivityFeed({ rows }: { rows: Array<{ type: "fill" | "signal" | "settle"; text: string; tx?: string; provenance: string; time: string }> }) {
   const [hovered, setHovered] = useState<number | null>(null);
-  const ACTIVITY_ICON = { fill: CheckCircle2, signal: Zap, settle: Flag } as const;
+  const dotFor = (t: string): string => (t === "fill" ? COLOR.up : t === "settle" ? COLOR.faint : COLOR.accent);
   if (rows.length === 0) {
     return (
       <div style={{ border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: 16 }}>
@@ -179,22 +179,19 @@ function ActivityFeed({ rows }: { rows: Array<{ type: "fill" | "signal" | "settl
         <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Live activity</span>
       </div>
       <div>
-        {rows.map((a, i) => {
-          const Icon = ACTIVITY_ICON[a.type];
-          return (
-            <div key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ display: "flex", gap: 10, padding: "9px 8px", marginLeft: -8, marginRight: -8, borderRadius: 6, background: hovered === i ? COLOR.surface2 : "transparent", borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
-              <Icon size={13} color={COLOR.accent} style={{ flexShrink: 0, marginTop: 2 }} />
-              <div style={{ minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4 }}>{a.text}</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: "monospace", fontSize: 10.5, color: COLOR.faint }}>{a.time}</span>
-                  <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{a.provenance}</span>
-                  {a.tx && <a href="#" style={{ fontFamily: "monospace", fontSize: 10.5, color: COLOR.accent, textDecoration: "none" }}>{a.tx} &rarr;</a>}
-                </div>
+        {rows.map((a, i) => (
+          <div key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ display: "flex", gap: 10, padding: "9px 8px", marginLeft: -8, marginRight: -8, borderRadius: 6, background: hovered === i ? COLOR.surface2 : "transparent", borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotFor(a.type), flexShrink: 0, marginTop: 7, opacity: 0.9 }} aria-hidden="true" />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, fontFamily: "monospace", color: COLOR.text }}>{a.type} <span style={{ color: COLOR.muted, fontFamily: "inherit" }}>- {a.text}</span></p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: "monospace", fontSize: 10.5, color: COLOR.faint }}>{a.time}</span>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{a.provenance}</span>
+                {a.tx && <a href="#" style={{ fontFamily: "monospace", fontSize: 10.5, color: COLOR.accent, textDecoration: "none" }}>{a.tx} -&gt;</a>}
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );

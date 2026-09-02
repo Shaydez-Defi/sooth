@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Activity, Clock, TrendingUp, RefreshCcw } from "lucide-react";
+import { RefreshCcw } from "lucide-react";
 import { COLOR } from "../components/theme";
 import { PanelHeader } from "../components/PanelHeader";
 import { ProvenanceTag } from "../components/ProvenanceTag";
@@ -56,12 +56,12 @@ export default function Bots() {
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginTop: 24 }}>
             <div className="sooth-glass-card">
-              <PanelHeader icon={Activity}>Status</PanelHeader>
+              <PanelHeader>Status</PanelHeader>
               <div style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: botStatus === "running" ? COLOR.up : COLOR.faint }}>{botStatus}</div>
               <div style={{ marginTop: 8 }}><ProvenanceTag tag="DERIVED" small /></div>
             </div>
             <div className="sooth-glass-card">
-              <PanelHeader icon={TrendingUp}>Performance</PanelHeader>
+              <PanelHeader>Performance</PanelHeader>
               {perf.metrics ? (
                 <>
                   <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: perf.metrics.netPnL >= 0 ? COLOR.up : COLOR.down }}>{perf.metrics.netPnL >= 0 ? "+" : ""}${perf.metrics.netPnL.toFixed(2)} net</div>
@@ -80,7 +80,7 @@ export default function Bots() {
           </div>
 
           <div className="sooth-glass-card" style={{ marginTop: 20 }}>
-            <PanelHeader icon={Clock}>Recent events</PanelHeader>
+            <PanelHeader>Recent events</PanelHeader>
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
               <ProvenanceTag tag="DERIVED (persisted bot_events)" small />
             </div>

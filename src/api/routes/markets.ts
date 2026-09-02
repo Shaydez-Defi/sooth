@@ -20,7 +20,7 @@ function jsonSafe(value: unknown): unknown {
 }
 
 export async function registerMarketRoutes(fastify: FastifyInstance): Promise<void> {
-  // GET /markets — activeMarkets, LIVE_INDEXER
+  // GET /markets - activeMarkets, LIVE_INDEXER
   fastify.get("/markets", async (_request, reply) => {
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
@@ -45,7 +45,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     }
   });
 
-  // GET /markets/:id — marketOnchain + indexer meta, LIVE_ONCHAIN + LIVE_INDEXER
+  // GET /markets/:id - marketOnchain + indexer meta, LIVE_ONCHAIN + LIVE_INDEXER
   fastify.get("/markets/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!id || id.trim() === "") {
@@ -70,7 +70,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
       return reply.send({
         data: {
           unified: { symbol: found.symbol, info: found.info, dataIntegrity: "LIVE_INDEXER" as const },
-          // onchain payload contains BigInts (expiry, pool params) — serialize to strings, don't 500
+          // onchain payload contains BigInts (expiry, pool params) - serialize to strings, don't 500
           onchain: { ...(jsonSafe(onchain) as Record<string, unknown>), dataIntegrity: "LIVE_ONCHAIN" as const },
         },
         dataIntegrity: "LIVE_INDEXER/LIVE_ONCHAIN" as const,
@@ -80,7 +80,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     }
   });
 
-  // GET /markets/:id/orderbook — fetchOrderBook, tagged LIVE_INDEXER
+  // GET /markets/:id/orderbook - fetchOrderBook, tagged LIVE_INDEXER
   fastify.get("/markets/:id/orderbook", async (request, reply) => {
     const { id } = request.params as { id: string };
     const query = request.query as { depth?: string };
@@ -113,7 +113,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     }
   });
 
-  // GET /markets/:id/analysis — Stage 3's analyzeMarket, live, DERIVED on LIVE_INDEXER/LIVE_ONCHAIN
+  // GET /markets/:id/analysis - Stage 3's analyzeMarket, live, DERIVED on LIVE_INDEXER/LIVE_ONCHAIN
   fastify.get("/markets/:id/analysis", async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!id || id.trim() === "") {
@@ -160,7 +160,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     }
   });
 
-  // GET /markets/:id/history — real rows from snapshots.db, HISTORICAL, ?limit=
+  // GET /markets/:id/history - real rows from snapshots.db, HISTORICAL, ?limit=
   fastify.get("/markets/:id/history", async (request, reply) => {
     const { id } = request.params as { id: string };
     const query = request.query as { limit?: string };
@@ -198,7 +198,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
         marketId,
         limit,
         dataIntegrity: "HISTORICAL" as const,
-        ...(hasHistory ? {} : { note: "no history yet — logger hasn't captured this market" }),
+        ...(hasHistory ? {} : { note: "no history yet - logger hasn't captured this market" }),
       });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets/:id/history failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });

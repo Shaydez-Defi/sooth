@@ -1,4 +1,4 @@
-// Single source of truth for design tokens — replaces copy-pasted COLOR/SPACE/PANEL_LABEL in each dropped .jsx
+// Single source of truth for design tokens - replaces copy-pasted COLOR/SPACE/PANEL_LABEL in each dropped .jsx
 export const COLOR = {
   ink: "#0A0908",
   surface: "#14130F",
@@ -17,7 +17,7 @@ export const EASE = "cubic-bezier(0.32, 0.72, 0, 1)" as const;
 
 export const SPACE = { header: 12, block: 16, panel: 20 } as const;
 
-// PANEL_LABEL is a style object, not a component — shared between MarketDetail and StrategyLab
+// PANEL_LABEL is a style object, not a component - shared between MarketDetail and StrategyLab
 export const PANEL_LABEL_STYLE: React.CSSProperties = {
   fontFamily: "monospace",
   fontSize: 11,

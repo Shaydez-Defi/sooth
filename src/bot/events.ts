@@ -1,5 +1,5 @@
 /**
- * Bot event log — persisted in data/snapshots.db (reuse logger DB, zero external service).
+ * Bot event log - persisted in data/snapshots.db (reuse logger DB, zero external service).
  * Every loop tick's outcome: market evaluated, decision, risk result, execution result or SKIP reason.
  * Becomes eventual GET /bots/:id/events data source.
  * Tags: LIVE_INDEXER/LIVE_ONCHAIN for market data, DERIVED for computed.

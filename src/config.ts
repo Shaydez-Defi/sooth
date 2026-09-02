@@ -1,8 +1,8 @@
 /**
- * Config loader — validates env and fails LOUDLY on missing/invalid values.
+ * Config loader - validates env and fails LOUDLY on missing/invalid values.
  * Never defaults to fake chain IDs, RPC URLs, or keys.
  *
- * Tag: DERIVED (env) + LIVE_ONCHAIN (chain IDs) — not ESTIMATED.
+ * Tag: DERIVED (env) + LIVE_ONCHAIN (chain IDs) - not ESTIMATED.
  */
 import { config as dotenvConfig } from "dotenv";
 import { CHAIN_IDS, NETWORK_DEFAULTS } from "./constants.js";
@@ -58,10 +58,10 @@ function resolveNetwork(chainId: number, explicitNetwork: string | undefined): "
 function validatePrivateKey(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   // Allow placeholder zero-key to be treated as "not set" only if explicitly the example zero key?
-  // But per rules, never default to fake values — so validate shape strictly and let caller decide to omit.
+  // But per rules, never default to fake values - so validate shape strictly and let caller decide to omit.
   const trimmed = raw.trim();
   if (trimmed === "" || trimmed === "0x0000000000000000000000000000000000000000000000000000000000000000") {
-    // Treat example placeholder as missing — read-only mode
+    // Treat example placeholder as missing - read-only mode
     return undefined;
   }
   if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
@@ -71,11 +71,11 @@ function validatePrivateKey(raw: string | undefined): string | undefined {
 }
 
 /**
- * SNAPSHOT LOGGER — poller config for continuous order-book capture.
- * Tag: DERIVED (env) — poll interval env-overridable, DB path zero external service.
+ * SNAPSHOT LOGGER - poller config for continuous order-book capture.
+ * Tag: DERIVED (env) - poll interval env-overridable, DB path zero external service.
  */
 export const SNAPSHOT_CONFIG = {
-  /** Poller interval in ms — env POLL_INTERVAL_MS overrides, must be >= 5_000. */
+  /** Poller interval in ms - env POLL_INTERVAL_MS overrides, must be >= 5_000. */
   POLL_INTERVAL_MS: (() => {
     const raw = process.env.POLL_INTERVAL_MS?.trim();
     if (raw === undefined || raw === "") return 45_000;
@@ -85,12 +85,12 @@ export const SNAPSHOT_CONFIG = {
     }
     return n;
   })(),
-  /** SQLite path — zero external service dependency (Codespace unattended). */
+  /** SQLite path - zero external service dependency (Codespace unattended). */
   DB_PATH: process.env.SNAPSHOT_DB_PATH?.trim() ? String(process.env.SNAPSHOT_DB_PATH?.trim()) : "data/snapshots.db",
 } as const;
 
 /**
- * ANALYSIS — thresholds for Market Intelligence Engine (all in src/config.ts per brief, no inline magic numbers).
+ * ANALYSIS - thresholds for Market Intelligence Engine (all in src/config.ts per brief, no inline magic numbers).
  * Depth window: top N levels of YES book (bid/ask quantity sum). See src/analysis/engine.ts for formula.
  */
 export const ANALYSIS_CONFIG = {
@@ -111,7 +111,7 @@ export const ANALYSIS_CONFIG = {
 } as const;
 
 /**
- * BOT — defaults for Strategy/Risk pipeline (brief sections 7 & 9).
+ * BOT - defaults for Strategy/Risk pipeline (brief sections 7 & 9).
  * All risk thresholds in src/config.ts, no inline magic in strategy/risk modules.
  * Values are DERIVED, not LIVE_ONCHAIN.
  */
@@ -122,13 +122,13 @@ export const BOT_CONFIG = {
   MAX_POSITION: 5,
   /** Max cumulative loss in tUSDC before halt. */
   MAX_LOSS: 50,
-  /** Min liquidity — mirrors ANALYSIS_CONFIG.MIN_LIQUIDITY. */
+  /** Min liquidity - mirrors ANALYSIS_CONFIG.MIN_LIQUIDITY. */
   MIN_LIQUIDITY: ANALYSIS_CONFIG.MIN_LIQUIDITY,
-  /** Max spread — mirrors ANALYSIS_CONFIG.MAX_SPREAD. */
+  /** Max spread - mirrors ANALYSIS_CONFIG.MAX_SPREAD. */
   MAX_SPREAD: ANALYSIS_CONFIG.MAX_SPREAD,
-  /** Max spread bps — mirrors ANALYSIS_CONFIG.MAX_SPREAD_BPS. */
+  /** Max spread bps - mirrors ANALYSIS_CONFIG.MAX_SPREAD_BPS. */
   MAX_SPREAD_BPS: ANALYSIS_CONFIG.MAX_SPREAD_BPS,
-  /** Min seconds to expiry — mirrors ANALYSIS_CONFIG.MIN_TIME_REMAINING. */
+  /** Min seconds to expiry - mirrors ANALYSIS_CONFIG.MIN_TIME_REMAINING. */
   MIN_TIME_REMAINING: ANALYSIS_CONFIG.MIN_TIME_REMAINING,
   /** Min order size (shares). Must be >= EC lot (testnet 1 raw = 0.000001). */
   MIN_ORDER_SIZE: 1,
@@ -136,11 +136,11 @@ export const BOT_CONFIG = {
   MAX_ORDER_SIZE: 10,
   /** Default order size for edge-threshold strategy. */
   DEFAULT_ORDER_SIZE: 1,
-  /** Min native balance for gas (wei) — 0.01 STT. */
+  /** Min native balance for gas (wei) - 0.01 STT. */
   MIN_NATIVE_WEI: 10_000_000_000_000_000n, // 0.01 * 1e18
-  /** Min collateral raw (tUSDC 6dp) loose check — 0.5 tUSDC. Precise check is price*size. */
+  /** Min collateral raw (tUSDC 6dp) loose check - 0.5 tUSDC. Precise check is price*size. */
   MIN_COLLATERAL_RAW: 500_000n, // 0.5 * 1e6
-  /** Loop interval for BotRunner (ms) — reuses snapshot logger's poll interval if env not set, min 5000. */
+  /** Loop interval for BotRunner (ms) - reuses snapshot logger's poll interval if env not set, min 5000. */
   LOOP_INTERVAL_MS: (() => {
     const raw = process.env.BOT_LOOP_INTERVAL_MS?.trim();
     if (raw === undefined || raw === "") return 30_000;
@@ -153,9 +153,9 @@ export const BOT_CONFIG = {
 } as const;
 
 /**
- * MID-MOVE OBSERVABILITY — lightweight mid-price drift alert, NOT a trading signal.
+ * MID-MOVE OBSERVABILITY - lightweight mid-price drift alert, NOT a trading signal.
  * Compares current mid to most recent prior snapshot for same market in data/snapshots.db.
- * Threshold chosen as 0.02-0.03 probability points (2-3 cents) — small enough to catch
+ * Threshold chosen as 0.02-0.03 probability points (2-3 cents) - small enough to catch
  * intraday drifts observed in stage-logger data (e.g. 0.082 move over 47s) while not
  * spamming on every 1-tick jitter. DERIVED, not magic in logic.
  */
@@ -173,12 +173,12 @@ export const MID_MOVE_CONFIG = {
 } as const;
 
 /**
- * SETTLEMENT POLLER — cadence for realized-P&L settlement checks (brief §13 gap-close).
+ * SETTLEMENT POLLER - cadence for realized-P&L settlement checks (brief §13 gap-close).
  * Settlement happens on the market's own clock, not the bot's trading clock, so this poller runs
  * on its OWN interval, decoupled from the BotRunner loop. DERIVED config, env-overridable.
  */
 export const SETTLEMENT_POLL_CONFIG = {
-  /** Poll interval in ms — env SETTLEMENT_POLL_INTERVAL_MS overrides, must be >= 5000. */
+  /** Poll interval in ms - env SETTLEMENT_POLL_INTERVAL_MS overrides, must be >= 5000. */
   POLL_INTERVAL_MS: (() => {
     const raw = process.env.SETTLEMENT_POLL_INTERVAL_MS?.trim();
     if (raw === undefined || raw === "") return 60_000;
@@ -191,13 +191,13 @@ export const SETTLEMENT_POLL_CONFIG = {
 } as const;
 
 /**
- * ADVERSE SELECTION — post-fill mid lookahead for edge analytics (brief §13 gap-close).
+ * ADVERSE SELECTION - post-fill mid lookahead for edge analytics (brief §13 gap-close).
  * After a real fill we measure where the mid went over the next N minutes vs our fill price,
  * joined from the snapshot logger's real mid history (data/snapshots.db, polled ~45s).
- *   LOOKAHEAD_SECONDS: 300 (5 min) — long enough to capture info-driven drift after our taker flow
+ *   LOOKAHEAD_SECONDS: 300 (5 min) - long enough to capture info-driven drift after our taker flow
  *     (observed mids in snapshots.db move substantially within minutes), short enough to stay inside
  *     the market's short trading window.
- *   MAX_DEVIATION_SECONDS: 120 (2 min) — the logger polls every ~45s, so a snapshot within ±120s of
+ *   MAX_DEVIATION_SECONDS: 120 (2 min) - the logger polls every ~45s, so a snapshot within ±120s of
  *     fillTime+N is at most ~2 polls off the target; anything further is not "close enough to t+N"
  *     and that fill is reported NOT COMPUTABLE (never interpolated).
  * DERIVED config, env-overridable, no magic numbers in logic.

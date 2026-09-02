@@ -1,5 +1,5 @@
 /**
- * Settlement Poller — Stage 9 (brief §13 gap-close).
+ * Settlement Poller - Stage 9 (brief §13 gap-close).
  *
  * For every open (non-zero-size) position in bot_positions, this polls whether its market has
  * settled on-chain and, when it has, writes the REAL realized P&L using Stage 4's exact payout
@@ -13,7 +13,7 @@
  * its own interval (`SETTLEMENT_POLL_CONFIG.POLL_INTERVAL_MS`). It is intentionally decoupled from
  * BotRunner's loop; `npm run settle` runs it as a standalone lightweight script.
  *
- * A position whose market has NOT settled is left clearly marked OPEN/unrealized — no outcome is
+ * A position whose market has NOT settled is left clearly marked OPEN/unrealized - no outcome is
  * guessed before it is known. Anything that cannot be resolved (network error, missing cost basis,
  * ambiguous winningOutcome) is reported in the result's `errors[]` and the position is left OPEN.
  * No silent catches.
@@ -46,7 +46,7 @@ export type SettlementStatusResolver = (marketIds: readonly string[]) => Promise
  * Real resolver: ec-core pattern from Stages 1.5/4, verified.
  *  1. Indexer `listBinaryMarkets({status:"Finalized"})` shortlists settled ids (cheap, venue-scoped).
  *  2. Per open position, `getMarketOnchain(marketId)` is the AUTHORITATIVE on-chain gate
- *     (Stage 1.5: gate on this status, not the indexer) — isResolved/isVoided/winningOutcome.
+ *     (Stage 1.5: gate on this status, not the indexer) - isResolved/isVoided/winningOutcome.
  */
 export function createEcSettlementResolver(ctx: EcContext): SettlementStatusResolver {
   return async (marketIds) => {
@@ -90,7 +90,7 @@ export interface SettlementPollResult {
   readonly errors: string[];
 }
 /**
- * One poll pass over all open positions. Deterministic and network-free given a resolver — unit
+ * One poll pass over all open positions. Deterministic and network-free given a resolver - unit
  * tests inject a stub resolver; the live script uses createEcSettlementResolver.
  */
 export async function runSettlementPoll(
@@ -106,7 +106,7 @@ export async function runSettlementPoll(
   try {
     statusMap = await opts.resolve(open.map((p) => p.marketId));
   } catch (err) {
-    result.errors.push(`settlement resolver failed as a whole: ${(err as Error).message} — all ${open.length} open position(s) left open`);
+    result.errors.push(`settlement resolver failed as a whole: ${(err as Error).message} - all ${open.length} open position(s) left open`);
     result.stillOpen.push(...open.map((p) => ({ marketId: p.marketId, reason: "resolver error (indexer/onchain unreachable)" })));
     return result;
   }
@@ -114,16 +114,16 @@ export async function runSettlementPoll(
   for (const p of open) {
     const st = statusMap.get(p.marketId);
     if (st === undefined) {
-      result.stillOpen.push({ marketId: p.marketId, reason: "no settlement status returned for this market — left open" });
+      result.stillOpen.push({ marketId: p.marketId, reason: "no settlement status returned for this market - left open" });
       continue;
     }
     if (!st.isResolved && !st.isVoided) {
-      result.stillOpen.push({ marketId: p.marketId, reason: `status=${st.status} unresolved and not voided — no premature realization` });
+      result.stillOpen.push({ marketId: p.marketId, reason: `status=${st.status} unresolved and not voided - no premature realization` });
       continue;
     }
     if (p.avgEntryPrice === null || !(p.totalSize > 0)) {
       result.errors.push(
-        `position ${p.marketId} is OPEN with totalSize=${p.totalSize} avgEntryPrice=${String(p.avgEntryPrice)} — cost basis missing, cannot compute settlement P&L (no guessing), left open`,
+        `position ${p.marketId} is OPEN with totalSize=${p.totalSize} avgEntryPrice=${String(p.avgEntryPrice)} - cost basis missing, cannot compute settlement P&L (no guessing), left open`,
       );
       continue;
     }
@@ -136,7 +136,7 @@ export async function runSettlementPoll(
     });
     if (pnl === null) {
       result.errors.push(
-        `market ${p.marketId} settled (isVoided=${st.isVoided}) but payout uncomputable (winningOutcome=${String(st.winningOutcome)}) — left open, no guess`,
+        `market ${p.marketId} settled (isVoided=${st.isVoided}) but payout uncomputable (winningOutcome=${String(st.winningOutcome)}) - left open, no guess`,
       );
       continue;
     }
@@ -181,7 +181,7 @@ export async function runSettlementPoll(
 /**
  * Continuous poller loop on the settlement poll interval (default SETTLEMENT_POLL_CONFIG).
  * Runs an immediate first poll, then on the interval; the timer is unref'd so it cannot keep the
- * process alive on its own. Errors are logged, never swallowed — a failed poll leaves positions open.
+ * process alive on its own. Errors are logged, never swallowed - a failed poll leaves positions open.
  */
 export function startSettlementPoller(args: {
   readonly db: Database.Database;
@@ -205,7 +205,7 @@ export function startSettlementPoller(args: {
         if (result.stillOpen.length > 0) console.log(`[SETTLE] ${result.stillOpen.length} open position(s) still unrealized (not guessed)`);
       })
       .catch((err: unknown) => {
-        console.error(`[SETTLE] poll failed: ${(err as Error).message} — positions left open`);
+        console.error(`[SETTLE] poll failed: ${(err as Error).message} - positions left open`);
       });
 
   void runOnce();

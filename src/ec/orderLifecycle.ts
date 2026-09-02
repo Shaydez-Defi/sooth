@@ -23,7 +23,7 @@ export function createOrderState(): OrderState {
 // Data-integrity tagged results
 
 export interface PlaceResultTagged {
-  // LIVE_ONCHAIN — from receipt / event
+  // LIVE_ONCHAIN - from receipt / event
   readonly txHash: `0x${string}`; // LIVE_ONCHAIN
   readonly blockNumber: bigint; // LIVE_ONCHAIN
   readonly status: string; // LIVE_ONCHAIN (receipt.status)
@@ -76,7 +76,7 @@ export interface CancelOrderParams {
 /**
  * Simulate checks before broadcast (local, no chain write).
  * Verifies tick/lot snapping would produce non-zero size, price in (0,1), and wallet funded.
- * Does NOT skip the actual broadcast — EC SDK deliberately skips eth_call simulation
+ * Does NOT skip the actual broadcast - EC SDK deliberately skips eth_call simulation
  * (see packages/ec-core/src/exchange.ts assertTxOk), so this local guard is the simulate step.
  */
 export function simulatePlace(params: PlaceRestingOrderParams): { ok: boolean; reason?: string } {
@@ -94,7 +94,7 @@ export function simulatePlace(params: PlaceRestingOrderParams): { ok: boolean; r
 
 /**
  * Full lifecycle: simulate → broadcast via placeLimit → verify receipt → confirm event/open-orders → update state.
- * Never assumes mined tx means success — verifies OrderPlaced event (orderId) and open-orders list.
+ * Never assumes mined tx means success - verifies OrderPlaced event (orderId) and open-orders list.
  */
 export async function placeRestingOrder(params: PlaceRestingOrderParams): Promise<PlaceResultTagged> {
   const { ctx, market, onchain, outcome, side, price, size, yesSymbol, state } = params;
@@ -105,7 +105,7 @@ export async function placeRestingOrder(params: PlaceRestingOrderParams): Promis
     throw new Error(`[simulate] placeRestingOrder rejected: ${sim.reason}`);
   }
 
-  // 2. Broadcast — placeLimit handles tick/lot snapping, funded check, trader.placeOrder, assertTxOk
+  // 2. Broadcast - placeLimit handles tick/lot snapping, funded check, trader.placeOrder, assertTxOk
   let placed: PlacedOrder & { hash?: string };
   try {
     placed = await placeLimit(ctx, {
@@ -115,7 +115,7 @@ export async function placeRestingOrder(params: PlaceRestingOrderParams): Promis
       side,
       price,
       size,
-      type: "limit", // GTC (rest) — not "post-only" nor "ioc"
+      type: "limit", // GTC (rest) - not "post-only" nor "ioc"
       expiresInSec: 600, // 10 min, capped at market expiry inside placeLimit
     });
   } catch (err) {
@@ -127,7 +127,7 @@ export async function placeRestingOrder(params: PlaceRestingOrderParams): Promis
   // but PlacedOrder only surfaces hash/orderId/filled; fetch receipt for blockNumber/status/gas.
   const txHash = placed.hash as `0x${string}` | undefined;
   if (!txHash) {
-    throw new Error(`[verify] placeLimit returned no tx hash — cannot verify receipt`);
+    throw new Error(`[verify] placeLimit returned no tx hash - cannot verify receipt`);
   }
 
   // Fetch receipt for LIVE_ONCHAIN verification (blockNumber, status, gas)
@@ -140,9 +140,9 @@ export async function placeRestingOrder(params: PlaceRestingOrderParams): Promis
     throw new Error(`[verify] tx reverted: ${txHash} status=${status} block=${blockNumber.toString()}`);
   }
 
-  // 3. Verify OrderPlaced event — EC's trader returns orderId only if rested; check logs not assumed.
+  // 3. Verify OrderPlaced event - EC's trader returns orderId only if rested; check logs not assumed.
   // For a resting order we expect rested=true and orderId present. A non-reverting unsuccessful placement
-  // would mine with status success but orderId undefined and fills empty — treat as failure.
+  // would mine with status success but orderId undefined and fills empty - treat as failure.
   const orderId: bigint | undefined = placed.orderId; // LIVE_ONCHAIN (from OrderPlaced log)
   const rested: boolean = placed.rested; // LIVE_ONCHAIN (orderId present && filled < quantity)
   const filled: number = placed.filled; // LIVE_ONCHAIN (human units)
@@ -152,13 +152,13 @@ export async function placeRestingOrder(params: PlaceRestingOrderParams): Promis
     // For this stage we want a resting order; if it filled immediately or was rejected, surface it.
     if (filled > 0) {
       throw new Error(
-        `[verify] order did not rest — filled ${filled} (price may have been too aggressive for deep-book intent). tx=${txHash} block=${blockNumber}`,
+        `[verify] order did not rest - filled ${filled} (price may have been too aggressive for deep-book intent). tx=${txHash} block=${blockNumber}`,
       );
     }
-    throw new Error(`[verify] non-reverting unsuccessful placement: tx ${txHash} mined but no OrderPlaced event (orderId undefined, rested=${rested}). This matches brief's failure mode — not assuming success.`);
+    throw new Error(`[verify] non-reverting unsuccessful placement: tx ${txHash} mined but no OrderPlaced event (orderId undefined, rested=${rested}). This matches brief's failure mode - not assuming success.`);
   }
 
-  // 4. Confirm via open-orders query (LIVE_ONCHAIN) — poll with deadline, indexer lags seconds (event-contracts.md:124)
+  // 4. Confirm via open-orders query (LIVE_ONCHAIN) - poll with deadline, indexer lags seconds (event-contracts.md:124)
   let confirmedInOpenOrders = false;
   const deadlineMs = Date.now() + 8000;
   while (Date.now() < deadlineMs) {
@@ -173,9 +173,9 @@ export async function placeRestingOrder(params: PlaceRestingOrderParams): Promis
   }
 
   if (!confirmedInOpenOrders) {
-    // Non-reverting but orderId present yet not visible after polling — log warning but still treat as placed
+    // Non-reverting but orderId present yet not visible after polling - log warning but still treat as placed
     // because receipt+event proves it rested; indexer lag is expected (sharp edge 9). Surface as not_confirmed.
-    console.warn(`[verify] orderId ${orderId.toString()} not yet in fetchOpenOrders(${yesSymbol}) after 8s polling tx ${txHash} block ${blockNumber} — indexer lag, but OrderPlaced event confirmed so treating as placed`);
+    console.warn(`[verify] orderId ${orderId.toString()} not yet in fetchOpenOrders(${yesSymbol}) after 8s polling tx ${txHash} block ${blockNumber} - indexer lag, but OrderPlaced event confirmed so treating as placed`);
   }
 
   // 5. Update internal state (DERIVED mirror of LIVE_ONCHAIN)
@@ -209,7 +209,7 @@ export async function cancelOrderLifecycle(params: CancelOrderParams): Promise<C
   let res: { hash: `0x${string}`; receipt: { status: string; blockNumber: bigint; gasUsed: bigint } };
   try {
     const raw = await cancelById(ctx, onchain, orderId);
-    // cancelById returns trader result with hash+receipt — cast required
+    // cancelById returns trader result with hash+receipt - cast required
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     res = raw as unknown as typeof res;
   } catch (err) {
@@ -225,7 +225,7 @@ export async function cancelOrderLifecycle(params: CancelOrderParams): Promise<C
     throw new Error(`[verify] cancel tx reverted: ${txHash} status=${receiptStatus} block=${blockNumber}`);
   }
 
-  // 2. Confirm not in open orders (LIVE_ONCHAIN) — poll disappearance with deadline (indexer lag)
+  // 2. Confirm not in open orders (LIVE_ONCHAIN) - poll disappearance with deadline (indexer lag)
   let stillOpen = false;
   const deadlineMs = Date.now() + 8000;
   while (Date.now() < deadlineMs) {

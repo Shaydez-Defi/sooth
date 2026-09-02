@@ -37,7 +37,7 @@ export default function Bots() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Bot Dashboard</h1>
-          <p style={{ color: COLOR.muted, fontSize: 13, marginTop: 4 }}>Single bot for hackathon — id is always <code style={{ fontFamily: "monospace", background: COLOR.surface2, padding: "2px 6px", borderRadius: 4 }}>default</code> <ProvenanceTag tag="DERIVED" small /></p>
+          <p style={{ color: COLOR.muted, fontSize: 13, marginTop: 4 }}>Single bot for hackathon - id is always <code style={{ fontFamily: "monospace", background: COLOR.surface2, padding: "2px 6px", borderRadius: 4 }}>default</code> <ProvenanceTag tag="DERIVED" small /></p>
         </div>
         <button onClick={() => void load()} style={{ display: "flex", alignItems: "center", gap: 6, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 12px", color: COLOR.muted, cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>
           <RefreshCcw size={14} /> Refresh
@@ -70,11 +70,11 @@ export default function Bots() {
                   <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <ProvenanceTag tag="LIVE_ONCHAIN" small /> <ProvenanceTag tag="DERIVED" small />
                   </div>
-                  {perf.metrics.winRate !== null && <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 6 }}>Win rate {(perf.metrics.winRate * 100).toFixed(0)}% · realized edge {perf.metrics.realizedEdge !== null ? `$${perf.metrics.realizedEdge.toFixed(2)}` : "—"}</div>}
+                  {perf.metrics.winRate !== null && <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 6 }}>Win rate {(perf.metrics.winRate * 100).toFixed(0)}% · realized edge {perf.metrics.realizedEdge !== null ? `$${perf.metrics.realizedEdge.toFixed(2)}` : "-"}</div>}
                   {perf.metrics.gaps.length > 0 && <div style={{ fontSize: 11, color: COLOR.faint, marginTop: 8, borderTop: `1px solid ${COLOR.border}`, paddingTop: 8 }}>{perf.metrics.gaps[0].slice(0, 120)}</div>}
                 </>
               ) : (
-                <div style={{ fontSize: 13, color: COLOR.faint }}>No fills yet — insufficient data. Trade first, then metrics appear.</div>
+                <div style={{ fontSize: 13, color: COLOR.faint }}>No fills yet - insufficient data. Trade first, then metrics appear.</div>
               )}
             </div>
           </div>

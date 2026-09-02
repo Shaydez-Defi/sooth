@@ -2,7 +2,7 @@
   "name": "dreamdex-trading-intelligence-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "DreamDEX Trading Intelligence Backend — Somnia testnet",
+  "description": "DreamDEX Trading Intelligence Backend - Somnia testnet",
   "type": "module",
   "engines": {
     "node": ">=20"

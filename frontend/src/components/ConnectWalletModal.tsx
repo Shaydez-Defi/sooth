@@ -1,4 +1,4 @@
-// Converted from sooth-connect-wallet.jsx — now a reusable modal component, not a standalone page.
+// Converted from sooth-connect-wallet.jsx - now a reusable modal component, not a standalone page.
 // Preserves original copy/noting about brand logos (wallet icons are generic lucide Wallet marks).
 
 import { useState } from "react";
@@ -139,14 +139,14 @@ export function ConnectWalletModal({ open, onClose, onSelect }: { open: boolean;
               <ShieldCheck size={20} color={COLOR.accent} style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: COLOR.text }}>A home for your assets</p>
-                <p style={{ fontSize: 13, color: COLOR.muted, margin: "4px 0 0", lineHeight: 1.5 }}>Wallets hold what you use to trade — funds, positions, and the keys that authorize a bot on your behalf.</p>
+                <p style={{ fontSize: 13, color: COLOR.muted, margin: "4px 0 0", lineHeight: 1.5 }}>Wallets hold what you use to trade - funds, positions, and the keys that authorize a bot on your behalf.</p>
               </div>
             </div>
             <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
               <KeyRound size={20} color={COLOR.accent} style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: COLOR.text }}>No new password</p>
-                <p style={{ fontSize: 13, color: COLOR.muted, margin: "4px 0 0", lineHeight: 1.5 }}>Instead of creating an account, connect the wallet you already have — same one across every DreamDEX app.</p>
+                <p style={{ fontSize: 13, color: COLOR.muted, margin: "4px 0 0", lineHeight: 1.5 }}>Instead of creating an account, connect the wallet you already have - same one across every DreamDEX app.</p>
               </div>
             </div>
             <button className="sooth-focusable" style={{ width: "100%", padding: "11px 0", fontSize: 14, background: COLOR.accent, color: COLOR.ink, border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>

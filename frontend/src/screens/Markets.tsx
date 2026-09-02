@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, ChevronRight, ChevronUp, ChevronDown, Info, Zap, CheckCircle2, Flag, TrendingUp } from "lucide-react";
 import { ApiError, postAnalyze, type MarketAnalysis } from "../lib/api";
 
-// ── Preserved verbatim from sooth-markets-v3.jsx — do not unify, flagged as follow-up duplication
+// ── Preserved verbatim from sooth-markets-v3.jsx - do not unify, flagged as follow-up duplication
 const COLOR = {
   ink: "#0A0908",
   surface: "#14130F",
@@ -19,13 +19,13 @@ const COLOR = {
 } as const;
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
-// No magic numbers — thresholds from src/config.ts ANALYSIS_CONFIG
+// No magic numbers - thresholds from src/config.ts ANALYSIS_CONFIG
 const MIN_LIQUIDITY = 100;
 const MAX_SPREAD = 0.06;
 const MIN_EDGE = 0.02;
 const SECONDS_PER_HOUR = 3600;
 
-// Type for enriched row derived from live MarketAnalysis — visual shape identical to original
+// Type for enriched row derived from live MarketAnalysis - visual shape identical to original
 type EnrichedRow = {
   id: string;
   label: string;
@@ -73,7 +73,7 @@ function ProvenanceNote() {
       </button>
       {open && (
         <div role="tooltip" style={{ position: "absolute", top: "130%", left: 0, zIndex: 5, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "10px 12px", width: 260, fontSize: 12, color: COLOR.muted, lineHeight: 1.5 }}>
-          Signal is gated by liquidity and spread before edge size matters — a wide edge in a thin market still reads NO. TRADE needs edge ≥ 5%, sufficient liquidity, and a tight spread.
+          Signal is gated by liquidity and spread before edge size matters - a wide edge in a thin market still reads NO. TRADE needs edge ≥ 5%, sufficient liquidity, and a tight spread.
         </div>
       )}
     </div>
@@ -147,7 +147,7 @@ function SignalSummary({ markets }: { markets: EnrichedRow[] }) {
             <div><div style={{ fontSize: 11, color: COLOR.faint }}>Sooth Est.</div><div style={{ fontFamily: "monospace", fontSize: 15, color: COLOR.accent }}>{pct(best.soothEst)}</div></div>
             <div><div style={{ fontSize: 11, color: COLOR.faint }}>Edge</div><div style={{ fontFamily: "monospace", fontSize: 15, color: COLOR.up }}>+{(best.edge * 100).toFixed(1)}%</div></div>
           </div>
-          <p style={{ fontSize: 12, color: COLOR.muted, marginTop: 10, lineHeight: 1.5 }}>Cleared the {(Math.abs(best.edge) * 100).toFixed(0)}% edge threshold with liquidity and spread within range — the strongest qualifying signal right now.</p>
+          <p style={{ fontSize: 12, color: COLOR.muted, marginTop: 10, lineHeight: 1.5 }}>Cleared the {(Math.abs(best.edge) * 100).toFixed(0)}% edge threshold with liquidity and spread within range - the strongest qualifying signal right now.</p>
         </>
       ) : (
         <p style={{ fontSize: 13, color: COLOR.faint, margin: 0 }}>No market clears the trade threshold right now. That&apos;s a legitimate result, not a gap.</p>
@@ -156,7 +156,7 @@ function SignalSummary({ markets }: { markets: EnrichedRow[] }) {
   );
 }
 
-// Original ACTIVITY shape preserved verbatim — data now populated from live API where available,
+// Original ACTIVITY shape preserved verbatim - data now populated from live API where available,
 // but markup/spacing/colors identical to sooth-markets-v3.jsx
 function ActivityFeed({ rows }: { rows: Array<{ type: "fill" | "signal" | "settle"; text: string; tx?: string; provenance: string; time: string }> }) {
   const [hovered, setHovered] = useState<number | null>(null);
@@ -168,7 +168,7 @@ function ActivityFeed({ rows }: { rows: Array<{ type: "fill" | "signal" | "settl
           <span className="sooth-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLOR.up, display: "inline-block" }} />
           <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Live activity</span>
         </div>
-        <p style={{ fontSize: 12, color: COLOR.faint, margin: 0 }}>No recent activity — trades and signals will appear here.</p>
+        <p style={{ fontSize: 12, color: COLOR.faint, margin: 0 }}>No recent activity - trades and signals will appear here.</p>
       </div>
     );
   }
@@ -285,7 +285,7 @@ export default function SoothMarkets() {
   const waitCount = rows.filter((m) => m.tier === "WAIT").length;
   const noCount = rows.filter((m) => m.tier === "NO").length;
 
-  // Live activity derived from best signal — keeps same 5-row markup shape as original when data exists
+  // Live activity derived from best signal - keeps same 5-row markup shape as original when data exists
   const activityRows = useMemo(() => {
     if (rows.length === 0) return [];
     // Derive minimal live rows: strongest signal + count summary, rendered in same ActivityFeed

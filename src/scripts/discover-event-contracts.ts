@@ -1,9 +1,9 @@
 /**
  * Read-only proof of Event Contracts on Somnia Shannon testnet.
- * Uses @dreamdex-bot-kit/ec-core over @somnia-chain/markets-sdk — no private key required.
+ * Uses @dreamdex-bot-kit/ec-core over @somnia-chain/markets-sdk - no private key required.
  *
  * Steps (EC, not spot):
- *  1. Connect via createExchange({withSigner:false}) — RPC + indexer + chain from EcConfig
+ *  1. Connect via createExchange({withSigner:false}) - RPC + indexer + chain from EcConfig
  *  2. List real available Event Contracts (binary) via activeMarkets()
  *  3. For one real contract, print: metadata, market state (status/probability/liquidity), order book, time-to-expiry
  *
@@ -15,12 +15,12 @@ import { createExchange, activeMarkets, marketOnchain, snapshot, outcomeSymbols,
 import { formatUnits } from "viem";
 
 async function main(): Promise<void> {
-  console.log("=== DreamDEX Trading Intelligence — Stage 1.5 EC Discovery ===\n");
+  console.log("=== DreamDEX Trading Intelligence - Stage 1.5 EC Discovery ===\n");
 
   // EC's createExchange reads NETWORK (default testnet), VENUE_ID, RPC_URL, INDEXER_URL, etc. from env.
   // For read-only we do NOT need PRIVATE_KEY. Set NETWORK=testnet explicitly to avoid mainnet fallback.
   if (!process.env.NETWORK) process.env.NETWORK = "testnet";
-  // VENUE_ID scoping — docs say it moves, but without it multi-venue deployments throw.
+  // VENUE_ID scoping - docs say it moves, but without it multi-venue deployments throw.
   // Default to documented testnet DreamDEX venue (operator 2) so read-only discovery works out-of-box.
   if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) {
     process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   console.log(`RPC URL      : ${cfg.rpcUrl}`);
   console.log(`WS RPC URL   : ${cfg.wsRpcUrl}`);
   console.log(`Indexer      : ${cfg.indexerUrl}`);
-  console.log(`VENUE_ID     : ${cfg.venueId ?? "(unset — will infer from live markets)"}`);
+  console.log(`VENUE_ID     : ${cfg.venueId ?? "(unset - will infer from live markets)"}`);
   console.log(`OPERATOR_ID  : ${cfg.operatorId ?? "(unset)"}`);
   console.log(`Collateral   : ${cfg.addresses.collateral} (decimals=${cfg.decimals})`);
   console.log(`Tick/Lot     : ${cfg.tick.toString()} / ${cfg.lot.toString()} (raw)`);
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   try {
     const chainId = await ctx.exchange.client.getViemClient().getChainId();
     const block = await ctx.exchange.client.getViemClient().getBlockNumber();
-    console.log(`[RPC] Connected — chainId=${chainId}, block=${block}`);
+    console.log(`[RPC] Connected - chainId=${chainId}, block=${block}`);
     if (chainId !== cfg.chainId) {
       console.warn(`[WARN] RPC chainId ${chainId} != config ${cfg.chainId}`);
     }
@@ -59,13 +59,13 @@ async function main(): Promise<void> {
     throw new Error(`RPC connect failed at ${cfg.rpcUrl}: ${(err as Error).message}`, { cause: err });
   }
 
-  // List live Event Contracts (binary) — LIVE_INDEXER + venue scoping
+  // List live Event Contracts (binary) - LIVE_INDEXER + venue scoping
   let markets: Awaited<ReturnType<typeof activeMarkets>>;
   try {
     markets = await activeMarkets(ctx);
     console.log(`\n[LIVE_INDEXER] activeMarkets (via venue ${cfg.venueId ?? "inferred"}) → ${markets.length} market(s)`);
   } catch (err) {
-    // Multi-venue ambiguity throws (markets.ts:86-96) — dump diagnostics
+    // Multi-venue ambiguity throws (markets.ts:86-96) - dump diagnostics
     console.error(`[FATAL] activeMarkets threw (likely multi-venue without VENUE_ID): ${(err as Error).message}`);
     try {
       const all = Object.values(await ctx.exchange.loadMarkets(true));
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     } catch (e) {
       console.warn(`[WARN] diag loadMarkets failed: ${(e as Error).message}`);
     }
-    console.log("\n[RESULT] No live Event Contracts in current venue scope — report as empty (not fabricated).");
+    console.log("\n[RESULT] No live Event Contracts in current venue scope - report as empty (not fabricated).");
     await ctx.exchange.close().catch(() => undefined);
     return;
   }
@@ -164,7 +164,7 @@ async function main(): Promise<void> {
   const headroom = headroomSec(Number(info.intervalSec ?? 0));
   console.log(`[DERIVED] Time remaining: ${remainingSec}s (${(remainingSec / 60).toFixed(1)} min) headroom=${headroom}s tradable=${remainingSec > headroom && onchain.status === MARKET_STATUS.Trading}`);
 
-  // LIVE_INDEXER order book (human units) — price is YES probability
+  // LIVE_INDEXER order book (human units) - price is YES probability
   let snap: Awaited<ReturnType<typeof snapshot>>;
   let rawBook: Awaited<ReturnType<typeof ctx.exchange.fetchOrderBook>>;
   try {
@@ -175,12 +175,12 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n[LIVE_INDEXER] snapshot ${yes} (depth 5, price=YES prob):`);
-  console.log(`  bestYesBid = ${snap.bestYesBid !== undefined ? snap.bestYesBid.toFixed(4) : "—"} (implied prob ${snap.bestYesBid !== undefined ? (snap.bestYesBid * 100).toFixed(1) + "%" : "—"})`);
-  console.log(`  bestYesAsk = ${snap.bestYesAsk !== undefined ? snap.bestYesAsk.toFixed(4) : "—"} (implied ${snap.bestYesAsk !== undefined ? (snap.bestYesAsk * 100).toFixed(1) + "%" : "—"})`);
-  console.log(`  yesMid     = ${snap.yesMid !== undefined ? snap.yesMid.toFixed(4) : "—"} (${snap.yesMid !== undefined ? (snap.yesMid * 100).toFixed(1) + "%" : "—"})`);
+  console.log(`  bestYesBid = ${snap.bestYesBid !== undefined ? snap.bestYesBid.toFixed(4) : "-"} (implied prob ${snap.bestYesBid !== undefined ? (snap.bestYesBid * 100).toFixed(1) + "%" : "-"})`);
+  console.log(`  bestYesAsk = ${snap.bestYesAsk !== undefined ? snap.bestYesAsk.toFixed(4) : "-"} (implied ${snap.bestYesAsk !== undefined ? (snap.bestYesAsk * 100).toFixed(1) + "%" : "-"})`);
+  console.log(`  yesMid     = ${snap.yesMid !== undefined ? snap.yesMid.toFixed(4) : "-"} (${snap.yesMid !== undefined ? (snap.yesMid * 100).toFixed(1) + "%" : "-"})`);
   const spread = snap.bestYesBid !== undefined && snap.bestYesAsk !== undefined ? snap.bestYesAsk - snap.bestYesBid : undefined;
   const spreadBps = spread !== undefined && snap.yesMid !== undefined && snap.yesMid > 0 ? (spread / snap.yesMid) * 10000 : undefined;
-  console.log(`  spread     = ${spread !== undefined ? spread.toFixed(4) : "—"} ${spreadBps !== undefined ? `(${spreadBps.toFixed(1)} bps)` : ""}`);
+  console.log(`  spread     = ${spread !== undefined ? spread.toFixed(4) : "-"} ${spreadBps !== undefined ? `(${spreadBps.toFixed(1)} bps)` : ""}`);
 
   console.log(`\n[LIVE_INDEXER] fetchOrderBook ${yes} (raw, human units):`);
   console.log(`  bids (${rawBook.bids.length}):`);
@@ -219,7 +219,7 @@ async function main(): Promise<void> {
 
   // Settlement / venue note
   console.log(`\n[INFO] EC order placement uses ec-core placeLimit (tick/lot as ints, via trader.placeOrder), not spot Pool.place. See docs/bot-kit-summary.md §8h.`);
-  console.log(`[INFO] Settlement via redeemOutcome/settledMarkets; this script is read-only — no mint/claim sent.`);
+  console.log(`[INFO] Settlement via redeemOutcome/settledMarkets; this script is read-only - no mint/claim sent.`);
 
   console.log(`\n=== Verification: hit real EC venue ${info.venueId ?? "?"} on chain ${cfg.chainId}, market ${info.marketId}, pool ${onchain.pool} ===`);
 

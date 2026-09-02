@@ -44,14 +44,14 @@ vi.mock("@dreamdex-bot-kit/ec-core", () => {
 
 import { buildServer } from "./server.js";
 
-describe("API routes — shape, tags, validation", () => {
+describe("API routes - shape, tags, validation", () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
 
   beforeAll(async () => {
     server = await buildServer();
   });
 
-  it("GET /health — correct shape and tag", async () => {
+  it("GET /health - correct shape and tag", async () => {
     const res = await server.inject({ method: "GET", url: "/health" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { status: string; dataIntegrity: string };
@@ -59,7 +59,7 @@ describe("API routes — shape, tags, validation", () => {
     expect(body.dataIntegrity).toBe("DERIVED");
   });
 
-  it("GET /markets — LIVE_INDEXER tag and array", async () => {
+  it("GET /markets - LIVE_INDEXER tag and array", async () => {
     const res = await server.inject({ method: "GET", url: "/markets" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { data: unknown[]; dataIntegrity: string };
@@ -67,14 +67,14 @@ describe("API routes — shape, tags, validation", () => {
     expect(body.dataIntegrity).toBe("LIVE_INDEXER");
   });
 
-  it("GET /markets/:id/orderbook — validation for depth", async () => {
+  it("GET /markets/:id/orderbook - validation for depth", async () => {
     const res = await server.inject({ method: "GET", url: "/markets/0xabc/orderbook?depth=100" });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as { error: string };
     expect(body.error).toContain("depth");
   });
 
-  it("GET /markets/:id/analysis — DERIVED tag", async () => {
+  it("GET /markets/:id/analysis - DERIVED tag", async () => {
     const res = await server.inject({ method: "GET", url: "/markets/0xabc/analysis" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { data: { direction: string }; dataIntegrity: unknown };
@@ -82,27 +82,27 @@ describe("API routes — shape, tags, validation", () => {
     expect(body.dataIntegrity).toBeDefined();
   });
 
-  it("GET /positions — LIVE_ONCHAIN tag", async () => {
+  it("GET /positions - LIVE_ONCHAIN tag", async () => {
     const res = await server.inject({ method: "GET", url: "/positions" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { dataIntegrity: unknown };
     expect(body.dataIntegrity).toBeDefined();
   });
 
-  it("GET /portfolio — balances + positions", async () => {
+  it("GET /portfolio - balances + positions", async () => {
     const res = await server.inject({ method: "GET", url: "/portfolio" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { data: { positions: unknown } };
     expect(body.data).toHaveProperty("positions");
   });
 
-  it("POST /orders — validation rejects malformed body", async () => {
+  it("POST /orders - validation rejects malformed body", async () => {
     const res = await server.inject({ method: "POST", url: "/orders", payload: { side: "YES" } });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toBeDefined();
   });
 
-  it("POST /orders — risk rejects oversized order (size > max 10) — MUST be blocked, not executed", async () => {
+  it("POST /orders - risk rejects oversized order (size > max 10) - MUST be blocked, not executed", async () => {
     const res = await server.inject({
       method: "POST",
       url: "/orders",
@@ -114,14 +114,14 @@ describe("API routes — shape, tags, validation", () => {
     expect(body.risk.rejectionReasons.join(" ")).toContain("order size too large");
   });
 
-  it("POST /strategies/analyze — validation and DERIVED tag", async () => {
+  it("POST /strategies/analyze - validation and DERIVED tag", async () => {
     const res = await server.inject({ method: "POST", url: "/strategies/analyze", payload: { all: true } });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { data: unknown[]; dataIntegrity: string };
     expect(Array.isArray(body.data)).toBe(true);
   });
 
-  it("GET /bots — single-bot id default", async () => {
+  it("GET /bots - single-bot id default", async () => {
     const res = await server.inject({ method: "GET", url: "/bots" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { data: Array<{ id: string }> };
@@ -130,26 +130,26 @@ describe("API routes — shape, tags, validation", () => {
     expect(first.id).toBe("default");
   });
 
-  it("GET /bots/:id/performance — edge analytics shape, insufficient-data when 0 fills", async () => {
+  it("GET /bots/:id/performance - edge analytics shape, insufficient-data when 0 fills", async () => {
     const res = await server.inject({ method: "GET", url: "/bots/default/performance" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { data: { status: string } };
     expect(body.data).toHaveProperty("status");
   });
 
-  it("GET /bots/:id/events — pagination and filter", async () => {
+  it("GET /bots/:id/events - pagination and filter", async () => {
     const res = await server.inject({ method: "GET", url: "/bots/default/events?limit=5&eventType=BOT_START" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { data: unknown[]; pagination: { limit: number } };
     expect(body.pagination.limit).toBe(5);
   });
 
-  it("PATCH /bots/:id — validation rejects bad loopInterval", async () => {
+  it("PATCH /bots/:id - validation rejects bad loopInterval", async () => {
     const res = await server.inject({ method: "PATCH", url: "/bots/default", payload: { loopIntervalMs: 1 } });
     expect(res.statusCode).toBe(400);
   });
 
-  it("GET /bots/:id with unknown id — 404 with knownLimitation", async () => {
+  it("GET /bots/:id with unknown id - 404 with knownLimitation", async () => {
     const res = await server.inject({ method: "GET", url: "/bots/unknown-999/events" });
     expect(res.statusCode).toBe(404);
     const body = JSON.parse(res.body) as { knownLimitation: string };

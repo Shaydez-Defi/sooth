@@ -1,4 +1,4 @@
-// Typed fetch client for Sooth Fastify API — mirrors src/api/routes/* shapes exactly.
+// Typed fetch client for Sooth Fastify API - mirrors src/api/routes/* shapes exactly.
 // Base URL is env var, not hardcoded. No silent catches: every fetch throws typed ApiError on failure.
 
 export type DataIntegrityTag =
@@ -41,7 +41,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const apiLabel = API_BASE || "via vite proxy → http://localhost:3000";
     const hint =
       (err as Error).message.includes("Failed to fetch") || (err as Error).message.includes("NetworkError")
-        ? ` — API not reachable (${apiLabel}). Is the backend running? In a separate terminal run: npm run api  (from repo root, port 3000). If you need a different URL, set VITE_API_BASE_URL in frontend/.env and restart vite. In Codespaces, keep VITE_API_BASE_URL empty to use the vite proxy.`
+        ? ` - API not reachable (${apiLabel}). Is the backend running? In a separate terminal run: npm run api  (from repo root, port 3000). If you need a different URL, set VITE_API_BASE_URL in frontend/.env and restart vite. In Codespaces, keep VITE_API_BASE_URL empty to use the vite proxy.`
         : "";
     throw new ApiError(`Network error fetching ${path}: ${(err as Error).message}${hint}`, 0, null, null);
   }
@@ -150,7 +150,7 @@ export function getAnalysis(id: string): Promise<AnalysisResponse> {
   return apiFetch<AnalysisResponse>(`/markets/${encodeURIComponent(id)}/analysis`);
 }
 
-// POST /strategies/analyze — single or all
+// POST /strategies/analyze - single or all
 export interface AnalyzeRequest {
   marketId?: string;
   symbol?: string;

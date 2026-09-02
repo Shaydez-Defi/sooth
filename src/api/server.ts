@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 /**
- * API Server — Fastify, minimal, well-typed. Keeps DreamDEX logic behind service modules
+ * API Server - Fastify, minimal, well-typed. Keeps DreamDEX logic behind service modules
  * (routes call into src/analysis etc., no DreamDEX logic in routes).
- * Multi-bot reality: single instance for hackathon — :id is always "default"/"1", documented limitation.
+ * Multi-bot reality: single instance for hackathon - :id is always "default"/"1", documented limitation.
  */
 import Fastify from "fastify";
 import cors from "@fastify/cors";
@@ -14,7 +14,7 @@ import { registerBotRoutes } from "./routes/bots.js";
 import { BotRunner } from "../bot/runner.js";
 import { SNAPSHOT_CONFIG } from "../config.js";
 
-// Single BotRunner for hackathon — :id always "default"
+// Single BotRunner for hackathon - :id always "default"
 let globalRunner: BotRunner | null = null;
 
 export function getRunner(): BotRunner {
@@ -47,7 +47,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3000), host 
   console.log(`[API] listening on http://${host}:${port}`);
 }
 
-// Executable entry — `npm run api` (tsx src/api/server.ts)
+// Executable entry - `npm run api` (tsx src/api/server.ts)
 if (process.argv[1]?.endsWith("server.ts")) {
   startServer().catch((err: Error) => {
     console.error(`[API] failed to start: ${err.message}`);

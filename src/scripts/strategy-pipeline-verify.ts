@@ -1,8 +1,8 @@
 /**
- * Step 5 — One real order through full pipeline (controlled, min lot).
+ * Step 5 - One real order through full pipeline (controlled, min lot).
  * Picks one live market (longest expiry), runs runPipeline for real (with private key).
  * If risk engine approves, it will call placeRestingOrder (LIVE_ONCHAIN); if not, it honestly reports blocked.
- * This is the gated proof after dry-run — do NOT loosen thresholds here (honest).
+ * This is the gated proof after dry-run - do NOT loosen thresholds here (honest).
  */
 
 import { createExchange, activeMarkets, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
@@ -31,7 +31,7 @@ function buildBotConfig(): BotConfig {
 }
 
 async function main(): Promise<void> {
-  console.log("=== Step 5 — One Real Order Through Pipeline (controlled, min lot, honest) ===\n");
+  console.log("=== Step 5 - One Real Order Through Pipeline (controlled, min lot, honest) ===\n");
   console.log(`Config: MIN_EDGE=${ANALYSIS_CONFIG.MIN_EDGE} MIN_LIQUIDITY=${ANALYSIS_CONFIG.MIN_LIQUIDITY} MAX_SPREAD=${ANALYSIS_CONFIG.MAX_SPREAD} MIN_TIME_REMAINING=${ANALYSIS_CONFIG.MIN_TIME_REMAINING}s defaultSize=${BOT_CONFIG.DEFAULT_ORDER_SIZE}\n`);
 
   if (!process.env.NETWORK) process.env.NETWORK = "testnet";
@@ -136,8 +136,8 @@ async function main(): Promise<void> {
   console.log(`\nResult: decision ${result.decision.action}${result.decision.side ? ` ${result.decision.side} ${result.decision.price?.toFixed(4)} x${result.decision.size}` : ""}`);
   for (const r of result.decision.reasons) console.log(`  decision reason: ${r}`);
   if (result.risk === null) {
-    console.log("Risk: (not checked — strategy SKIPs, short-circuit)");
-    console.log("Execution: BLOCKED — no on-chain order placed (honest, as expected with balanced books)");
+    console.log("Risk: (not checked - strategy SKIPs, short-circuit)");
+    console.log("Execution: BLOCKED - no on-chain order placed (honest, as expected with balanced books)");
   } else {
     console.log(`Risk: ${result.risk.approved ? "APPROVED" : "REJECTED"}`);
     for (const rr of result.risk.rejectionReasons) console.log(`  risk: ${rr}`);
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
         }
       }
     } else {
-      console.log("Execution: BLOCKED by risk — no on-chain order placed (honest)");
+      console.log("Execution: BLOCKED by risk - no on-chain order placed (honest)");
     }
   }
 

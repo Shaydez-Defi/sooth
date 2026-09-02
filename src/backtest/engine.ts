@@ -1,9 +1,9 @@
 /**
- * EC Backtest Engine — real historical backtesting for Event Contracts, not spot.
+ * EC Backtest Engine - real historical backtesting for Event Contracts, not spot.
  *
  * INVESTIGATION (Step 1): @dreamdex-bot-kit/backtest is spot-only.
  * - docs/backtesting.md lists bots: momentum, mean-reversion, grid, market-making, twap, starter, ensemble (all spot symbols WETH:USDso etc.), intervals 1m-1d, SimPool (topOfBook/place/cancel/walletBase) built on OHLCV candles.
- * - packages/backtest/src contains book/synthetic, candles/fetch, sim/* — no mention of binary, BINARY, EC, event-contract, settled, Finalized.
+ * - packages/backtest/src contains book/synthetic, candles/fetch, sim/* - no mention of binary, BINARY, EC, event-contract, settled, Finalized.
  * - strategies/ec-* have no src/backtest.ts adapters (only index.ts using ec-core). Grep for "backtest" in ec-* returns 0.
  * - ec-core and markets-sdk use unified/binary tier (venueId/marketId/order book per YES probability), not OHLCV candles, not SimPool.
  * CONCLUSION: backtest does NOT support EC/binary in any documented way → do NOT force-fit SimPool onto EC.
@@ -13,12 +13,12 @@
  * - Historical EC order-book snapshots: NOT exposed. SDK's fetchOrderBook is live only; settled markets return empty or error. No candles for EC probabilities.
  * PATH TAKEN (Step 2, path B): Build our own EC engine that:
  * - Takes historical/settled EC markets (HISTORICAL outcome) + order-book state if available, otherwise at minimum entry-time book state (HISTORICAL lastPrice) + actual resolved outcome.
- * - For markets where only entry-state + final outcome are available (no full order-book time series), tagging is HISTORICAL entry point + HISTORICAL outcome, NOT a full backtest with intra-market repricing — explicit in output, don't imply more granularity.
+ * - For markets where only entry-state + final outcome are available (no full order-book time series), tagging is HISTORICAL entry point + HISTORICAL outcome, NOT a full backtest with intra-market repricing - explicit in output, don't imply more granularity.
  * - If truly no historical EC data exists, would STOP rather than fabricate synthetic candles for EC (never fabricate). Here we have 50+ settled, so we proceed with the limited granularity available.
  *
  * DATA INTEGRITY TAGS:
  * - HISTORICAL: settled market metadata (marketId, expiry, winningOutcome) from indexer listBinaryMarkets + onchain getMarketOnchain
- * - LIVE_INDEXER: current order book (if we snapshot live markets) — but for settled backtest, book is ESTIMATED/balanced synthetic from lastPrice when history unavailable, tagged as such
+ * - LIVE_INDEXER: current order book (if we snapshot live markets) - but for settled backtest, book is ESTIMATED/balanced synthetic from lastPrice when history unavailable, tagged as such
  * - DERIVED: imbalance, estimatedProbability, edge, P&L computed from above
  */
 
@@ -57,32 +57,32 @@ export interface BacktestTrade {
   readonly marketId: string; // HISTORICAL
   readonly symbol: string; // HISTORICAL
   readonly direction: "YES" | "NO"; // DERIVED
-  readonly entryPrice: number; // DERIVED — marketProbability (mid) at entry, HISTORICAL lastPrice proxy
+  readonly entryPrice: number; // DERIVED - marketProbability (mid) at entry, HISTORICAL lastPrice proxy
   readonly estimatedProbability: number; // DERIVED
   readonly edge: number; // DERIVED
   readonly imbalance: number; // DERIVED
-  readonly size: number; // DERIVED — fixed 1 share for backtest
+  readonly size: number; // DERIVED - fixed 1 share for backtest
   readonly winningOutcome: number | null; // HISTORICAL
   readonly voided: boolean; // HISTORICAL
-  readonly pnl: number; // DERIVED — per payout formula
+  readonly pnl: number; // DERIVED - per payout formula
   readonly won: boolean; // DERIVED
   readonly bookTag: string; // tag
 }
 
 export interface BacktestMetrics {
   readonly totalMarkets: number; // HISTORICAL count pulled
-  readonly tradableMarkets: number; // DERIVED — where engine did not return "no book depth"
+  readonly tradableMarkets: number; // DERIVED - where engine did not return "no book depth"
   readonly numberOfTrades: number; // DERIVED
   readonly winningTrades: number; // DERIVED
   readonly losingTrades: number; // DERIVED
-  readonly winRate: number; // DERIVED — winning/numberOfTrades
-  readonly totalPnL: number; // DERIVED — sum pnl
-  readonly averageReturn: number; // DERIVED — totalPnL / numberOfTrades
-  readonly maximumDrawdown: number; // DERIVED — max peak-to-trough of cumulative P&L
-  readonly averageEdge: number; // DERIVED — mean abs edge of trades taken
-  readonly tradeFrequency: number; // DERIVED — numberOfTrades / totalMarkets
-  readonly startingCapital: number; // DERIVED — hypothetical
-  readonly endingCapital: number; // DERIVED — starting + totalPnL
+  readonly winRate: number; // DERIVED - winning/numberOfTrades
+  readonly totalPnL: number; // DERIVED - sum pnl
+  readonly averageReturn: number; // DERIVED - totalPnL / numberOfTrades
+  readonly maximumDrawdown: number; // DERIVED - max peak-to-trough of cumulative P&L
+  readonly averageEdge: number; // DERIVED - mean abs edge of trades taken
+  readonly tradeFrequency: number; // DERIVED - numberOfTrades / totalMarkets
+  readonly startingCapital: number; // DERIVED - hypothetical
+  readonly endingCapital: number; // DERIVED - starting + totalPnL
   readonly trades: readonly BacktestTrade[]; // DERIVED
 }
 
@@ -111,7 +111,7 @@ export function computePnL(params: {
     return (0.5 - entryPrice) * size;
   }
   if (winningOutcome === null || winningOutcome === undefined) {
-    // No outcome known — cannot compute, treat as 0 and flag as not a real trade (should not happen)
+    // No outcome known - cannot compute, treat as 0 and flag as not a real trade (should not happen)
     return 0;
   }
   const won = (direction === "YES" && winningOutcome === 0) || (direction === "NO" && winningOutcome === 1);
@@ -168,7 +168,7 @@ function syntheticBookAround(mid: number): { bids: [number, number][]; asks: [nu
 }
 
 /**
- * Historical backtest — genuine intra-market repricing.
+ * Historical backtest - genuine intra-market repricing.
  * Execution model (documented, coherent, per-market):
  * - For a market with HISTORICAL snapshots (capturedAtUnix < expiry, sorted ascending):
  *   evaluate the strategy at EVERY snapshot for that market in time order.
@@ -181,7 +181,7 @@ function syntheticBookAround(mid: number): { bids: [number, number][]; asks: [nu
  *   single ESTIMATED synthetic balanced book around lastPrice (or 0.5) with timeRemaining 3600,
  *   tagged ESTIMATED. This keeps the tag accurate per-market.
  * Tag every result per-market with which path was used so a judge can see which trades came from
- * real book history vs fallback. Never fabricate a book — ESTIMATED is explicitly tagged.
+ * real book history vs fallback. Never fabricate a book - ESTIMATED is explicitly tagged.
  */
 export function runBacktestWithHistory(params: {
   markets: readonly MarketHistoryInput[];
@@ -232,7 +232,7 @@ export function runBacktestWithHistory(params: {
         }
       }
       if (!entryAnalysis || entryMid === null) {
-        // No snapshot yielded TRADE — honest 0 for this market's HISTORICAL path (could still be 0 if imbalance flat)
+        // No snapshot yielded TRADE - honest 0 for this market's HISTORICAL path (could still be 0 if imbalance flat)
         continue;
       }
     } else {
@@ -346,7 +346,7 @@ export function runBacktest(params: {
     // timeRemaining is not meaningful for settled (already expired), but engine gates on it.
     // For backtest we bypass timeRemaining gate by passing large remaining (e.g., 3600) so that
     // time does not cause NO_TRADE for historical; otherwise settled markets would always be NO_TRADE due to expiry.
-    // Tag this as HISTORICAL entry point — not live timeRemaining, so we override to pass gate.
+    // Tag this as HISTORICAL entry point - not live timeRemaining, so we override to pass gate.
     const timeRemaining = 3600; // HISTORICAL backtest: treat as if entry had ample time, tagged below
 
     const analysis: MarketAnalysis = analyzeMarket({

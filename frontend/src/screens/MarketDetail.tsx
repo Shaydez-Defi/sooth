@@ -4,7 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContai
 import { ChevronDown, CheckCircle2, XCircle, Waypoints, ShieldHalf, ArrowLeftRight, FlagTriangleRight, Compass, Activity } from "lucide-react";
 import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, type MarketAnalysis } from "../lib/api";
 
-// Preserved verbatim from sooth-market-detail-v3.jsx — inline, not unified
+// Preserved verbatim from sooth-market-detail-v3.jsx - inline, not unified
 const COLOR = {
   ink: "#0A0908",
   surface: "#14130F",
@@ -89,7 +89,7 @@ function TopBar({ analysis, marketId }: { analysis: MarketAnalysis | null; marke
 function ReasoningTrace({ analysis }: { analysis: MarketAnalysis }) {
   return (
     <div className="sooth-glass-card">
-      <PanelHeader icon={Compass}>Reasoning trace — why {analysis.recommendation}</PanelHeader>
+      <PanelHeader icon={Compass}>Reasoning trace - why {analysis.recommendation}</PanelHeader>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "6px 24px" }}>
         {analysis.reasons.map((r, i) => (
           <div key={i} style={{ display: "flex", gap: 8, fontSize: 13, color: COLOR.muted, lineHeight: 1.5 }}>
@@ -249,12 +249,12 @@ function AccountOverview() {
       .then((r) => setData({ balances: r.data.balances ? { nativeHuman: r.data.balances.nativeHuman, tUsdcHuman: r.data.balances.tUsdcHuman } : null, totalRealizedPnL: r.data.totalRealizedPnL, positionsCount: r.data.positionsCount }))
       .catch((e: unknown) => setErr((e as Error).message));
   }, []);
-  if (err) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.down, lineHeight: 1.5 }}>{err}{err.includes("API not reachable") && <span style={{ display: "block", marginTop: 6, color: COLOR.muted, fontSize: 11 }}>API down — run <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code></span>}</div></div>;
+  if (err) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.down, lineHeight: 1.5 }}>{err}{err.includes("API not reachable") && <span style={{ display: "block", marginTop: 6, color: COLOR.muted, fontSize: 11 }}>API down - run <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code></span>}</div></div>;
   if (!data) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.faint }}>Loading…</div></div>;
   return (
     <div className="sooth-glass-card">
       <PanelHeader>Account</PanelHeader>
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Wallet balance</span><span style={{ fontFamily: "monospace", color: COLOR.text }}>{data.balances ? `${data.balances.nativeHuman.toFixed(4)} SOMI · ${data.balances.tUsdcHuman.toFixed(2)} tUSDC` : "No key — connect wallet"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Wallet balance</span><span style={{ fontFamily: "monospace", color: COLOR.text }}>{data.balances ? `${data.balances.nativeHuman.toFixed(4)} SOMI · ${data.balances.tUsdcHuman.toFixed(2)} tUSDC` : "No key - connect wallet"}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Open positions</span><span style={{ fontFamily: "monospace", color: COLOR.text }}>{data.positionsCount}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Realized P&L</span><span style={{ fontFamily: "monospace", color: data.totalRealizedPnL >= 0 ? COLOR.up : COLOR.down }}>{data.totalRealizedPnL >= 0 ? "+" : ""}${data.totalRealizedPnL.toFixed(2)}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Win rate</span><span style={{ fontFamily: "monospace", color: COLOR.faint }}>Derived from closed positions</span></div>
@@ -307,14 +307,14 @@ function BottomTabs({ marketId }: { marketId: string }) {
             {loading && <div style={{ fontSize: 12, color: COLOR.faint }}>Loading events…</div>}
             {!loading && (events as Array<{ id: number; eventType: string; symbol?: string; dataJson?: { reason?: string } } >).map((e, i) => (
               <div key={e.id ?? i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: i > 0 ? `1px solid ${COLOR.border}` : "none", fontSize: 13 }}>
-                <div><span style={{ fontWeight: 600 }}>{e.eventType}</span><span style={{ color: COLOR.muted }}> — {e.symbol ?? String(e.dataJson?.reason ?? "")}</span></div>
+                <div><span style={{ fontWeight: 600 }}>{e.eventType}</span><span style={{ color: COLOR.muted }}> - {e.symbol ?? String(e.dataJson?.reason ?? "")}</span></div>
                 <span style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint, flexShrink: 0, marginLeft: 12 }}>{String(e.id)}</span>
               </div>
             ))}
             {!loading && events.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No bot events yet.</div>}
           </div>
         )}
-        {tab === "Open orders" && <div style={{ fontSize: 12, color: COLOR.faint }}>Open orders via GET /orders — requires signer. Shown in Portfolio.</div>}
+        {tab === "Open orders" && <div style={{ fontSize: 12, color: COLOR.faint }}>Open orders via GET /orders - requires signer. Shown in Portfolio.</div>}
         {tab === "Backtest results" && <div style={{ fontSize: 12, color: COLOR.faint }}>Run a backtest in <Link to="/lab" style={{ color: COLOR.accent }}>Strategy Lab</Link>.</div>}
         {tab !== "Positions" && tab !== "Bot events" && tab !== "Open orders" && tab !== "Backtest results" ? null : null}
       </div>
@@ -364,9 +364,9 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
     return (
       <div className="sooth-glass-card">
         <PanelHeader
-          right={<span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{analysis ? pct(analysis.marketProbability) : "—"} <span style={{ color: COLOR.faint, fontSize: 11 }}>now</span></span>}
+          right={<span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{analysis ? pct(analysis.marketProbability) : "-"} <span style={{ color: COLOR.faint, fontSize: 11 }}>now</span></span>}
         >
-          Market probability — history
+          Market probability - history
         </PanelHeader>
         <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: COLOR.faint, fontSize: 13 }}>Loading history…</div>
       </div>
@@ -376,7 +376,7 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
   if (error) {
     return (
       <div className="sooth-glass-card">
-        <PanelHeader>Market probability — history</PanelHeader>
+        <PanelHeader>Market probability - history</PanelHeader>
         <div style={{ padding: 12, border: `1px solid ${COLOR.down}`, borderRadius: 6, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace" }}>{error}</div>
       </div>
     );
@@ -388,14 +388,14 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
         <PanelHeader
           right={latest ? <span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{pct(latest.p)} <span style={{ color: COLOR.faint, fontSize: 11 }}>latest</span></span> : undefined}
         >
-          Market probability — history
+          Market probability - history
         </PanelHeader>
         <div style={{ height: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, border: `1px solid ${COLOR.border}`, borderRadius: 8, background: COLOR.surface2 }}>
           <div style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${COLOR.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Activity size={16} color={COLOR.faint} />
           </div>
           <div style={{ fontSize: 13, color: COLOR.muted, fontWeight: 600 }}>Not enough history yet</div>
-          <div style={{ fontSize: 12, color: COLOR.faint, maxWidth: 280, textAlign: "center", lineHeight: 1.5 }}>This market just listed — the logger will capture its first snapshots soon. {isExpired ? "Market is expired." : ""}</div>
+          <div style={{ fontSize: 12, color: COLOR.faint, maxWidth: 280, textAlign: "center", lineHeight: 1.5 }}>This market just listed - the logger will capture its first snapshots soon. {isExpired ? "Market is expired." : ""}</div>
           {analysis && <div style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>Current mid {pct(analysis.marketProbability)} • {history.length} snapshot(s) • <span style={{ color: COLOR.faint }}>HISTORICAL</span></div>}
         </div>
       </div>
@@ -408,7 +408,7 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
       <PanelHeader
         right={<span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{pct(latest.p)} <span style={{ color: COLOR.faint, fontSize: 11 }}>at {formatClock(latest.time)}</span></span>}
       >
-        Market probability — {chartData.length} snapshots
+        Market probability - {chartData.length} snapshots
       </PanelHeader>
       <ResponsiveContainer width="100%" height={180}>
         <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
@@ -445,7 +445,7 @@ function EventLog({ marketId }: { marketId: string }) {
           <div key={e.id ?? i} style={{ display: "flex", gap: 9, padding: "8px 6px", marginLeft: -6, marginRight: -6, borderRadius: 6, borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
             <Icon size={13} color={COLOR.muted} style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: COLOR.text }}>{e.eventType} — {e.createdAtIso ? formatClock(e.createdAtIso) : ""}</p>
+              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: COLOR.text }}>{e.eventType} - {e.createdAtIso ? formatClock(e.createdAtIso) : ""}</p>
               <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
                 <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{e.data.slice(0, 80)}</span>
               </div>
@@ -477,7 +477,7 @@ export default function MarketDetail() {
         setBids(bookRes.data.bids as [number, number][]);
         setAsks(bookRes.data.asks as [number, number][]);
       } else {
-        // fallback: analysis already has liquidity/spread but not depth — use empty
+        // fallback: analysis already has liquidity/spread but not depth - use empty
         setBids([]);
         setAsks([]);
       }

@@ -1,5 +1,5 @@
 /**
- * Reuse Stage 3's exact order-book depth/imbalance logic — don't reimplement divergent formula.
+ * Reuse Stage 3's exact order-book depth/imbalance logic - don't reimplement divergent formula.
  * This module re-exports the same calculation as src/analysis/engine.ts:20-32 and helpers,
  * so the snapshot logger stores bidDepth/askDepth/imbalance identical to live analysis engine,
  * enabling later backtests to use genuine HISTORICAL book data with same DEPTH_LEVELS.
@@ -36,7 +36,7 @@ export function computeDepthImbalance(
   const liquidity = bidDepth + askDepth;
   const imbalance = liquidity === 0 ? 0 : (bidDepth - askDepth) / liquidity; // DERIVED in [-1,1]
 
-  // LIVE_INDEXER — same as snapshot() and analyze-markets.ts mid derivation
+  // LIVE_INDEXER - same as snapshot() and analyze-markets.ts mid derivation
   const bestBid = bids[0]?.[0];
   const bestAsk = asks[0]?.[0];
   const mid = bestBid !== undefined && bestAsk !== undefined ? (bestBid + bestAsk) / 2 : (bestBid ?? bestAsk ?? null);

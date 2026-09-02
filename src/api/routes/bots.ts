@@ -7,7 +7,7 @@ import { SNAPSHOT_CONFIG } from "../../config.js";
 
 // Multi-bot reality check (brief Step 3):
 // Stage 6's BotRunner was built as a single instance. For hackathon we confirm single-bot is acceptable
-// and API models :id as always "default"/"1". This endpoint documents that limitation explicitly —
+// and API models :id as always "default"/"1". This endpoint documents that limitation explicitly -
 // it does NOT fake multi-bot support. If time allows we could extend to Map<id, BotRunner> but for now
 // every :id that is not "default" returns 404 with this note.
 
@@ -28,7 +28,7 @@ function serializeConfig(cfg: import("../../bot/config.js").PersistedBotConfig):
 function validateBotId(id: string, reply: import("fastify").FastifyReply): boolean {
   if (ALLOWED_IDS.has(id) || id === SINGLE_BOT_ID) return true;
   void reply.status(404).send({
-    error: `bot ${id} not found — single-bot-for-hackathon limitation: only id "${SINGLE_BOT_ID}" (or "1") is supported. Runner is a single instance (see docs/stage6-verification.md). Multi-bot would require Map<id,BotRunner> but is not yet implemented.`,
+    error: `bot ${id} not found - single-bot-for-hackathon limitation: only id "${SINGLE_BOT_ID}" (or "1") is supported. Runner is a single instance (see docs/stage6-verification.md). Multi-bot would require Map<id,BotRunner> but is not yet implemented.`,
     dataIntegrity: "DERIVED" as const,
     knownLimitation: "single-bot-for-hackathon, :id is always default/1",
   });
@@ -36,7 +36,7 @@ function validateBotId(id: string, reply: import("fastify").FastifyReply): boole
 }
 
 export async function registerBotRoutes(fastify: FastifyInstance): Promise<void> {
-  // GET /bots — list persisted bot configs/status (single)
+  // GET /bots - list persisted bot configs/status (single)
   fastify.get("/bots", async (_request, reply) => {
     try {
       const runner = getRunner();
@@ -54,7 +54,7 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
     }
   });
 
-  // POST /bots — create a bot config (persist, don't auto-start)
+  // POST /bots - create a bot config (persist, don't auto-start)
   fastify.post("/bots", async (request, reply) => {
     const body = (request.body as Record<string, unknown> | undefined) ?? {};
     // Basic validation
@@ -92,7 +92,7 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
     }
   });
 
-  // PATCH /bots/:id — update config (Stage 6's updateConfig)
+  // PATCH /bots/:id - update config (Stage 6's updateConfig)
   fastify.patch("/bots/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!validateBotId(id, reply)) return;
@@ -125,7 +125,7 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
     }
   });
 
-  // POST /bots/:id/start — BotRunner.start()
+  // POST /bots/:id/start - BotRunner.start()
   fastify.post("/bots/:id/start", async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!validateBotId(id, reply)) return;
@@ -141,7 +141,7 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
     }
   });
 
-  // POST /bots/:id/stop — BotRunner.stop()
+  // POST /bots/:id/stop - BotRunner.stop()
   fastify.post("/bots/:id/stop", async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!validateBotId(id, reply)) return;
@@ -157,7 +157,7 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
     }
   });
 
-  // GET /bots/:id/performance — edge analytics, from REAL bot_fills/bot_positions
+  // GET /bots/:id/performance - edge analytics, from REAL bot_fills/bot_positions
   fastify.get("/bots/:id/performance", async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!validateBotId(id, reply)) return;
@@ -172,7 +172,7 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
     }
   });
 
-  // GET /bots/:id/events — bot_events table, paginated, filterable by eventType
+  // GET /bots/:id/events - bot_events table, paginated, filterable by eventType
   fastify.get("/bots/:id/events", async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!validateBotId(id, reply)) return;

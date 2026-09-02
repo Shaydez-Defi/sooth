@@ -1,5 +1,5 @@
 /**
- * Risk Checks module — brief section 9, must NOT be skippable.
+ * Risk Checks module - brief section 9, must NOT be skippable.
  * StrategyDecision → riskEngine.check → only then → orderLifecycle.placeRestingOrder (via pipeline).
  * All thresholds from src/config.ts (BOT_CONFIG / ANALYSIS_CONFIG), no inline magic.
  * Tags: DERIVED checks on LIVE_INDEXER/LIVE_ONCHAIN inputs.
@@ -8,7 +8,7 @@
 import type { StrategyDecision, StrategyContext } from "../strategy/types.js";
 import type { MarketAnalysis } from "../analysis/types.js";
 
-// Collateral decimals for tUSDC on testnet (6) — DERIVED from vendor config, not magic in logic.
+// Collateral decimals for tUSDC on testnet (6) - DERIVED from vendor config, not magic in logic.
 // Mainnet uses 18, but risk check uses raw collateral math with 6dp for testnet; mainnet would need 18dp.
 // We keep 6dp as default and note the derivation; risk check uses price*size*1e6 which matches EcContext decimals.
 const COLLATERAL_DECIMALS = 6;
@@ -33,7 +33,7 @@ export function checkOrder(decision: StrategyDecision, context: RiskCheckContext
   const reasons: string[] = [];
   const { config, analysis, openPositions, currentLoss, balances } = context;
 
-  // 1) Bot enabled — config.enabled
+  // 1) Bot enabled - config.enabled
   if (!config.enabled) {
     reasons.push("risk: bot disabled (config.enabled=false)");
   }
@@ -41,48 +41,48 @@ export function checkOrder(decision: StrategyDecision, context: RiskCheckContext
   // If decision is SKIP, risk engine should not have been called (pipeline short-circuit).
   // We keep it as a rejection to enforce pipeline ordering, but don't add redundant reasons.
   if (decision.action !== "PLACE_ORDER") {
-    reasons.push("risk: decision is SKIP — risk check not applicable (should have short-circuited before risk)");
+    reasons.push("risk: decision is SKIP - risk check not applicable (should have short-circuited before risk)");
     return { approved: false, rejectionReasons: reasons };
   }
 
-  // Need price/size for remaining checks — if missing, order size valid will fail but we guard here.
+  // Need price/size for remaining checks - if missing, order size valid will fail but we guard here.
   const price = decision.price;
   const size = decision.size;
 
-  // 2) Market still active — timeRemaining >0 (LIVE_ONCHAIN). If expired, market Locked/Resolved.
+  // 2) Market still active - timeRemaining >0 (LIVE_ONCHAIN). If expired, market Locked/Resolved.
   // We treat analysis.timeRemaining <=0 as not active. LIVE_ONCHAIN expiry already in analysis.
   if (analysis.timeRemaining <= 0) {
-    reasons.push(`risk: market no longer active (timeRemaining ${analysis.timeRemaining.toFixed(0)}s <= 0 — expired/Locked)`);
+    reasons.push(`risk: market no longer active (timeRemaining ${analysis.timeRemaining.toFixed(0)}s <= 0 - expired/Locked)`);
   }
 
-  // 3) Close-to-expiry buffer — timeRemaining < minTimeRemaining (config)
+  // 3) Close-to-expiry buffer - timeRemaining < minTimeRemaining (config)
   if (analysis.timeRemaining < config.minTimeRemaining) {
     reasons.push(`risk: close to expiry (timeRemaining ${analysis.timeRemaining.toFixed(0)}s < buffer ${config.minTimeRemaining}s)`);
   }
 
-  // 4) Liquidity sufficient — analysis.liquidity < minLiquidity
+  // 4) Liquidity sufficient - analysis.liquidity < minLiquidity
   if (analysis.liquidity < config.minLiquidity) {
     reasons.push(`risk: liquidity insufficient (${analysis.liquidity.toFixed(1)} < min ${config.minLiquidity})`);
   }
 
-  // 5) Spread acceptable — analysis.spread > maxSpread or spreadBps > maxSpreadBps
+  // 5) Spread acceptable - analysis.spread > maxSpread or spreadBps > maxSpreadBps
   if (analysis.spread > config.maxSpread || analysis.spreadBps > config.maxSpreadBps) {
     const spreadStr = Number.isFinite(analysis.spread) ? analysis.spread.toFixed(4) : "∞";
     const bpsStr = Number.isFinite(analysis.spreadBps) ? analysis.spreadBps.toFixed(1) : "∞";
     reasons.push(`risk: spread too wide (${spreadStr} / ${bpsStr} bps > max ${config.maxSpread.toFixed(4)} / ${config.maxSpreadBps} bps)`);
   }
 
-  // 6) Position limit — openPositions.length >= maxPosition
+  // 6) Position limit - openPositions.length >= maxPosition
   if (openPositions.length >= config.maxPosition) {
     reasons.push(`risk: position limit reached (${openPositions.length} >= maxPosition ${config.maxPosition})`);
   }
 
-  // 7) Loss limit — currentLoss >= maxLoss (tUSDC) — halt further risk
+  // 7) Loss limit - currentLoss >= maxLoss (tUSDC) - halt further risk
   if (currentLoss >= config.maxLoss) {
     reasons.push(`risk: loss limit breached (currentLoss ${currentLoss.toFixed(4)} >= maxLoss ${config.maxLoss})`);
   }
 
-  // 8) Order size valid — size in [minOrderSize, maxOrderSize] and price in (0,1)
+  // 8) Order size valid - size in [minOrderSize, maxOrderSize] and price in (0,1)
   let sizeValid = true;
   if (size === undefined || !Number.isFinite(size)) {
     reasons.push("risk: order size missing or not finite");
@@ -109,7 +109,7 @@ export function checkOrder(decision: StrategyDecision, context: RiskCheckContext
     }
   }
 
-  // 9) Wallet funded — need price*size collateral (tUSDC) available.
+  // 9) Wallet funded - need price*size collateral (tUSDC) available.
   // Precise: requiredRaw = ceil(price * size * 1e6). Loose: also check minCollateralRaw threshold.
   if (!balances) {
     reasons.push("risk: wallet funded check unavailable (balances not provided)");
@@ -132,7 +132,7 @@ export function checkOrder(decision: StrategyDecision, context: RiskCheckContext
     }
   }
 
-  // 10) Gas sufficient — nativeWei >= minNativeWei
+  // 10) Gas sufficient - nativeWei >= minNativeWei
   if (!balances) {
     reasons.push("risk: gas check unavailable (balances not provided)");
   } else {

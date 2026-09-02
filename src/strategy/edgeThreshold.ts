@@ -1,5 +1,5 @@
 /**
- * Edge-threshold strategy — IS Stage 3's engine.
+ * Edge-threshold strategy - IS Stage 3's engine.
  * Action PLACE_ORDER only when recommendation===TRADE; otherwise SKIP with analysis reasons carried unchanged.
  * No inline magic numbers; price/size derived from config/analysis.
  */
@@ -13,7 +13,7 @@ export const edgeThresholdStrategy: Strategy = {
   id: EDGE_THRESHOLD_STRATEGY_ID,
 
   decide(analysis: MarketAnalysis, context: StrategyContext): StrategyDecision {
-    // SKIP path — carry through analysis reasons unchanged (don't re-derive or restate differently).
+    // SKIP path - carry through analysis reasons unchanged (don't re-derive or restate differently).
     if (analysis.recommendation !== "TRADE" || analysis.direction === "NONE") {
       return {
         action: "SKIP",
@@ -21,24 +21,24 @@ export const edgeThresholdStrategy: Strategy = {
       };
     }
 
-    // TRADE path — direction maps to side, price/size from config (not hardcoded).
+    // TRADE path - direction maps to side, price/size from config (not hardcoded).
     // Price is DERIVED from marketProbability (LIVE_INDEXER mid), not a magic constant.
     // For YES: price = YES mid (marketProbability); for NO: price = NO mid = 1 - YES mid.
     const side: "YES" | "NO" = analysis.direction;
     const price: number = side === "YES" ? analysis.marketProbability : 1 - analysis.marketProbability;
     const size: number = context.config.defaultOrderSize;
 
-    // Guard: price must be in (0,1) probability, size >0 — if not, SKIP with reasons (don't throw).
+    // Guard: price must be in (0,1) probability, size >0 - if not, SKIP with reasons (don't throw).
     if (!(price > 0 && price < 1) || !Number.isFinite(price)) {
       return {
         action: "SKIP",
-        reasons: [...analysis.reasons, `strategy: derived price ${String(price)} outside (0,1) — skip`],
+        reasons: [...analysis.reasons, `strategy: derived price ${String(price)} outside (0,1) - skip`],
       };
     }
     if (!(size > 0) || !Number.isFinite(size)) {
       return {
         action: "SKIP",
-        reasons: [...analysis.reasons, `strategy: config defaultOrderSize ${String(size)} invalid — skip`],
+        reasons: [...analysis.reasons, `strategy: config defaultOrderSize ${String(size)} invalid - skip`],
       };
     }
 

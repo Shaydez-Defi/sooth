@@ -25,8 +25,8 @@ function makeMockEcFactory(): (withSigner: boolean) => import("@dreamdex-bot-kit
     } as unknown as import("@dreamdex-bot-kit/ec-core").EcContext);
 }
 
-describe("BotRunner — lifecycle, auto-stop, events, fills", () => {
-  it("start/stop lifecycle — status() reflects running/stopped and loop halts", async () => {
+describe("BotRunner - lifecycle, auto-stop, events, fills", () => {
+  it("start/stop lifecycle - status() reflects running/stopped and loop halts", async () => {
     const runner = new BotRunner({ dbPath: ":memory:", ecFactory: makeMockEcFactory() });
     expect(runner.status()).toBe("stopped");
     await runner.start({ withSigner: false, loopIntervalMs: 50_000 });
@@ -43,7 +43,7 @@ describe("BotRunner — lifecycle, auto-stop, events, fills", () => {
     runner.close();
   });
 
-  it("loss-limit-triggered auto-stop (synthetic) — cost basis buy then EARLY_CLOSE sell realizes a real loss", () => {
+  it("loss-limit-triggered auto-stop (synthetic) - cost basis buy then EARLY_CLOSE sell realizes a real loss", () => {
     const runner = new BotRunner({ dbPath: ":memory:", ecFactory: makeMockEcFactory() });
     // Set maxLoss low, then buy 100 @0.60 and sell 100 @0.50 → realized loss of 10 tUSDC
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
@@ -83,7 +83,7 @@ describe("BotRunner — lifecycle, auto-stop, events, fills", () => {
     expect(pos?.netPosition).toBeCloseTo(2, 2);
     expect(pos?.totalSize).toBeCloseTo(2, 2);
     expect(pos?.avgEntryPrice).toBeCloseTo(0.6, 6);
-    // buys cannot realize P&L — that happens at EARLY_CLOSE (sell) or SETTLEMENT
+    // buys cannot realize P&L - that happens at EARLY_CLOSE (sell) or SETTLEMENT
     expect(pos?.realizedPnL).toBeCloseTo(0, 2);
     expect(pos?.status).toBe("OPEN");
     // Second fill adds at a different price → quantity-weighted average entry

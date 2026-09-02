@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { openSnapshotDb, insertBotFill, insertBotEvent, insertSnapshot, upsertBotPosition } from "../snapshots/db.js";
 import { computeEdgeAnalytics } from "./edge.js";
 
-describe("edge analytics — synthetic fills, not live", () => {
+describe("edge analytics - synthetic fills, not live", () => {
   it("insufficient-data when 0 fills", () => {
     const db = openSnapshotDb(":memory:");
     const result = computeEdgeAnalytics(db);
@@ -60,7 +60,7 @@ describe("edge analytics — synthetic fills, not live", () => {
     expect(result.metrics.netPnL).toBeCloseTo(0.79978, 4);
     expect(result.metrics.averageEdge).toBeCloseTo(0.0175, 4);
     expect(result.metrics.executionQuality).toBeCloseTo(0.015, 3); // (0.01+0.02)/2
-    // Win rate, realized edge are null per gap (needs settlement outcome) — we report gap, not fabricated
+    // Win rate, realized edge are null per gap (needs settlement outcome) - we report gap, not fabricated
     expect(result.metrics.winRate).toBeNull();
     expect(result.metrics.realizedEdge).toBeNull();
     // Adverse selection: null + explicit gap (post-fill mid not captured)
@@ -128,7 +128,7 @@ describe("edge analytics — synthetic fills, not live", () => {
     db.close();
   });
 });
-describe("edge analytics — Stage 9: winRate/realizedEdge from realized positions, adverse selection from real snapshots", () => {
+describe("edge analytics - Stage 9: winRate/realizedEdge from realized positions, adverse selection from real snapshots", () => {
   const T0 = 1_700_000_000; // fixed synthetic fill time (seconds)
 
   const snap = (marketId: string, symbol: string, mid: number, at: number, idOffset = 0) =>
@@ -172,7 +172,7 @@ describe("edge analytics — Stage 9: winRate/realizedEdge from realized positio
     expect(result.metrics.resolvedTrades).toBe(2);
     expect(result.metrics.openPositions).toBe(1);
     expect(result.metrics.grossPnL).toBeCloseTo(0.3, 6); // 0.4 - 0.1 + 0 (open)
-    // scoped gap: open position excluded, but the metric IS computed — no blanket gap
+    // scoped gap: open position excluded, but the metric IS computed - no blanket gap
     const gaps = result.metrics.gaps.join(" ");
     expect(gaps).toContain("1 open position(s) excluded");
   });

@@ -18,7 +18,7 @@ function makeSnapshot(
   };
 }
 
-describe("historicalBooks — genuine intra-market repricing", () => {
+describe("historicalBooks - genuine intra-market repricing", () => {
   it("synthetic imbalance shift mid-market → detects TRADE at the right snapshot, not just entry", () => {
     const expiry = 1_700_000_000 + 3600; // 1h after first snapshot
     const T0 = 1_700_000_000;
@@ -71,7 +71,7 @@ describe("historicalBooks — genuine intra-market repricing", () => {
     expect(trade.bookTag).toBe("HISTORICAL");
     // Should be YES direction because imbalance bid-heavy → tilt positive
     expect(trade.direction).toBe("YES");
-    // Entry time is the third snapshot, not the first — proves intra-market repricing
+    // Entry time is the third snapshot, not the first - proves intra-market repricing
     // (if it were only checking first snapshot, it would be NO_TRADE and 0 trades)
   });
 
@@ -121,7 +121,7 @@ describe("historicalBooks — genuine intra-market repricing", () => {
     expect(metrics.withHistory).toBe(0);
   });
 
-  it("timeRemaining gate respected per snapshot — close-to-expiry snapshot does not trigger TRADE", () => {
+  it("timeRemaining gate respected per snapshot - close-to-expiry snapshot does not trigger TRADE", () => {
     const expiry = 1_700_000_000 + 200; // only 200s after T0
     const T0 = 1_700_000_000;
     const skewedBids: ReadonlyArray<readonly [number, number]> = [

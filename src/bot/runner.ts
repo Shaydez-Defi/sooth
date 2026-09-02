@@ -1,7 +1,7 @@
 /**
- * Bot Runner — continuous loop: market data → strategy → risk → execution → fill monitor → position.
+ * Bot Runner - continuous loop: market data → strategy → risk → execution → fill monitor → position.
  * Real-time preference (brief §11):
- * - Spot DreamDexWs exposes subscribeOrderbook/subscribeTrades (ws.ts:82) — EC does NOT.
+ * - Spot DreamDexWs exposes subscribeOrderbook/subscribeTrades (ws.ts:82) - EC does NOT.
  *   Grep vendor/dreamdex-bot-kit/packages/ec-core/src → no subscribeOrderbook, no watchOrderBook wrapper;
  *   EC SDK's SomniaMarkets has wsRpcUrl + fetchPrice/watchPrice (underlying BTC/ETH spot via priceFeed),
  *   but no order-book WS. All EC strategies use poll: activeMarkets + fetchOrderBook every tick.
@@ -28,7 +28,7 @@ import type Database from "better-sqlite3";
 import type { EcContext } from "@dreamdex-bot-kit/ec-core";
 import type { MarketOnchain, UnifiedMarket } from "@somnia-chain/markets-sdk";
 
-// OrderFilled topic (6-arg signature) — shared EC/spot OrderBook core
+// OrderFilled topic (6-arg signature) - shared EC/spot OrderBook core
 // TOPIC.OrderFilled = 0xc87f4223e9e7c4e4f39f9b34fc9d64d78cdb95d9035b3748cbde59521261a399
 const ORDER_FILLED_TOPIC = "0xc87f4223e9e7c4e4f39f9b34fc9d64d78cdb95d9035b3748cbde59521261a399" as const;
 
@@ -65,7 +65,7 @@ export class BotRunner {
     if (lastFillBlock !== undefined) this.lastFillBlock = lastFillBlock;
   }
 
-  /** Check auto-stop conditions (loss limit or disabled) — returns reason if should stop, else null. Used by tick and tests. */
+  /** Check auto-stop conditions (loss limit or disabled) - returns reason if should stop, else null. Used by tick and tests. */
   checkAutoStopReason(): string | null {
     const cfg = this.getConfig();
     if (!cfg.bot.enabled) return "auto-stop: bot disabled";
@@ -87,7 +87,7 @@ export class BotRunner {
     return this.db;
   }
 
-  /** Programmatic config surface (brief §7) — so REST layer has something real to call. */
+  /** Programmatic config surface (brief §7) - so REST layer has something real to call. */
   getConfig(): PersistedBotConfig {
     return loadPersistedConfig(this.db);
   }
@@ -96,7 +96,7 @@ export class BotRunner {
     savePersistedConfig(this.db, cfg);
   }
 
-  /** Update loop interval or market scope without restart — persisted. */
+  /** Update loop interval or market scope without restart - persisted. */
   updateConfig(patch: Partial<PersistedBotConfig>): PersistedBotConfig {
     const cur = this.getConfig();
     const next: PersistedBotConfig = { ...cur, ...patch, bot: { ...cur.bot, ...(patch.bot as Partial<BotConfig> | undefined) } };
@@ -117,7 +117,7 @@ export class BotRunner {
     if (!cfg.bot.enabled) {
       logEvent(this.db, {
         eventType: "AUTO_STOP_DISABLED",
-        data: { reason: "bot disabled via config.enabled=false — start() refused", config: { enabled: cfg.bot.enabled } },
+        data: { reason: "bot disabled via config.enabled=false - start() refused", config: { enabled: cfg.bot.enabled } },
       });
       return;
     }
@@ -143,7 +143,7 @@ export class BotRunner {
       data: { marketScope: cfg.marketScope, loopIntervalMs: cfg.loopIntervalMs, venueId: this.ecCtx.config.venueId, withSigner: Boolean(this.ecCtx.canTrade) },
       blockNumber: this.lastFillBlock !== null ? Number(this.lastFillBlock) : null,
     });
-    console.log(`[BOT] started — scope=${cfg.marketScope} interval=${cfg.loopIntervalMs}ms venue=${String(this.ecCtx.config.venueId ?? "inferred")} withSigner=${String(this.ecCtx.canTrade)} block=${String(this.lastFillBlock ?? "—")}`);
+    console.log(`[BOT] started - scope=${cfg.marketScope} interval=${cfg.loopIntervalMs}ms venue=${String(this.ecCtx.config.venueId ?? "inferred")} withSigner=${String(this.ecCtx.canTrade)} block=${String(this.lastFillBlock ?? "-")}`);
 
     // Kick first tick immediately (no wait), then interval
     void this.tick().catch((err: unknown) => {
@@ -174,7 +174,7 @@ export class BotRunner {
       eventType: "BOT_STOP",
       data: { reason: reason ?? "manual stop", tickCount: this.tickCount },
     });
-    console.log(`[BOT] stopped — reason=${reason ?? "manual"} ticks=${this.tickCount}`);
+    console.log(`[BOT] stopped - reason=${reason ?? "manual"} ticks=${this.tickCount}`);
     if (this.ecCtx) {
       try {
         await Promise.race([this.ecCtx.exchange.close().catch(() => undefined), new Promise<void>((r) => setTimeout(r, 2000))]);
@@ -193,7 +193,7 @@ export class BotRunner {
 
     // Stop conditions (brief §6 step 8): disabled or loss limit breached → auto-stop, don't keep looping
     if (!cfg.bot.enabled) {
-      logEvent(this.db, { eventType: "AUTO_STOP_DISABLED", data: { reason: "config.enabled became false during run — auto-stop", tickCount: this.tickCount } });
+      logEvent(this.db, { eventType: "AUTO_STOP_DISABLED", data: { reason: "config.enabled became false during run - auto-stop", tickCount: this.tickCount } });
       await this.stop("auto-stop: bot disabled");
       return;
     }
@@ -239,7 +239,7 @@ export class BotRunner {
       markets = markets.filter((m) => String((m.info as unknown as { marketId: string }).marketId) === cfg.marketScope);
     }
 
-    console.log(`[BOT] tick #${this.tickCount} — ${markets.length} live market(s) block=${String(blockNumber ?? "—")} scope=${cfg.marketScope}`);
+    console.log(`[BOT] tick #${this.tickCount} - ${markets.length} live market(s) block=${String(blockNumber ?? "-")} scope=${cfg.marketScope}`);
 
     // Balances for risk checks (LIVE_ONCHAIN)
     let balances: { nativeWei: bigint; tUsdcRaw: bigint } | undefined;
@@ -268,7 +268,7 @@ export class BotRunner {
       const symbol = m.symbol;
       const { yes } = outcomeSymbols(m);
 
-      // Fetch onchain + order book (poll, not WS — EC is poll-only per Step 1)
+      // Fetch onchain + order book (poll, not WS - EC is poll-only per Step 1)
       let onchain: MarketOnchain | null = null;
       try {
         onchain = await marketOnchain(this.ecCtx, m);
@@ -320,7 +320,7 @@ export class BotRunner {
         timeRemaining,
       });
 
-      // 4b — Mid-move observability (does NOT feed strategy/risk, purely logged)
+      // 4b - Mid-move observability (does NOT feed strategy/risk, purely logged)
       // Compare current mid (LIVE_INDEXER) to most recent prior snapshot mid for same market
       checkMidMove(this.db, {
         marketId,
@@ -373,12 +373,12 @@ export class BotRunner {
         blockNumber,
       });
       if (risk === null) {
-        // SKIP — short-circuit proven, risk not called
+        // SKIP - short-circuit proven, risk not called
         logEvent(this.db, {
           marketId,
           symbol,
           eventType: "RISK_CHECK",
-          data: { skipped: true, reason: "strategy SKIPs — risk not checked (short-circuit)" },
+          data: { skipped: true, reason: "strategy SKIPs - risk not checked (short-circuit)" },
           blockNumber,
         });
       } else {
@@ -400,7 +400,7 @@ export class BotRunner {
             midAtDecision: mid,
             gasUsed: String(pr.gasUsed ?? ""),
             gasPrice: null,
-            // Stage 5 pipeline always BUYS the decided outcome (see pipeline.ts side:"buy") — the
+            // Stage 5 pipeline always BUYS the decided outcome (see pipeline.ts side:"buy") - the
             // fill's side/outcome come from OUR order, not the OrderFilled log (which has no side).
             side: "buy",
             outcome: decision.side as PositionSide,
@@ -419,7 +419,7 @@ export class BotRunner {
           marketId,
           symbol,
           eventType: "EXECUTION",
-          data: { executed: false, reason: "SKIP — no execution", decision, risk },
+          data: { executed: false, reason: "SKIP - no execution", decision, risk },
           blockNumber,
         });
       } else if (risk && !risk.approved) {
@@ -433,7 +433,7 @@ export class BotRunner {
       }
     }
 
-    // Fill monitoring — poll on-chain OrderFilled logs for each market's pool since last block
+    // Fill monitoring - poll on-chain OrderFilled logs for each market's pool since last block
     await this.pollFills(blockNumber);
 
     // Re-check stop conditions after tick (fills may have moved PnL)
@@ -515,7 +515,7 @@ export class BotRunner {
             if (exists) continue;
             insertBotFill(this.db, { txHash, blockNumber, marketId, symbol, rawData: l });
             logEvent(this.db, { marketId, symbol, eventType: "FILL_OBSERVED", data: { txHash, blockNumber, rawLog: l, source: "raw topic" }, blockNumber });
-            // Raw-topic fallback has no ABI-decoded qty/price/side/outcome — the position model
+            // Raw-topic fallback has no ABI-decoded qty/price/side/outcome - the position model
             // refuses to guess, so this fill is recorded as-is and the position is NOT updated.
             // Real fill paths (decoded OrderFilled matching one of our orders) carry side/outcome.
             this.applyPositionFromFill({ marketId, symbol, side: null, outcome: null, quantityFilled: 1, fillPrice: null });
@@ -537,7 +537,7 @@ export class BotRunner {
           const gasPrice = pending?.gasPrice ?? null;
           const gasCost = gasUsed && gasPrice ? Number(BigInt(gasUsed) * BigInt(gasPrice)) / 1e18 : null;
           // Side/outcome come from OUR placed order (OrderFilled has no side). null when the fill
-          // does not match one of our tracked orders — such fills are recorded but not applied to
+          // does not match one of our tracked orders - such fills are recorded but not applied to
           // positions (can't classify side/outcome without guessing).
           const side = pending?.side ?? null;
           const outcome = pending?.outcome ?? null;
@@ -567,7 +567,7 @@ export class BotRunner {
           }
         }
       } catch (err) {
-        // per-market log fetch failure — log it, don't crash the loop; fills will be re-scanned next tick
+        // per-market log fetch failure - log it, don't crash the loop; fills will be re-scanned next tick
         logEvent(this.db, {
           marketId,
           symbol,
@@ -580,7 +580,7 @@ export class BotRunner {
     this.lastFillBlock = toBlock;
   }
 
-  /** Apply a real (or simulated) fill to the position model — cost basis on buys, EARLY_CLOSE on sells. */
+  /** Apply a real (or simulated) fill to the position model - cost basis on buys, EARLY_CLOSE on sells. */
   private applyPositionFromFill(input: {
     marketId: string;
     symbol: string;
@@ -599,7 +599,7 @@ export class BotRunner {
         data: {
           positionUpdate: {
             skipped: true,
-            reason: `fill has no decoded side/outcome/price (side=${String(input.side)}, outcome=${String(input.outcome)}, price=${String(input.fillPrice)}) — position NOT updated, would require guessing`,
+            reason: `fill has no decoded side/outcome/price (side=${String(input.side)}, outcome=${String(input.outcome)}, price=${String(input.fillPrice)}) - position NOT updated, would require guessing`,
           },
         },
       });
@@ -643,7 +643,7 @@ export class BotRunner {
   }
 
   /**
-   * For tests: simulate a real fill through the SAME position model used for live data — builds
+   * For tests: simulate a real fill through the SAME position model used for live data - builds
    * cost basis on buys, realizes EARLY_CLOSE P&L on sells. P&L is COMPUTED, never passed in.
    */
   simulateFill(

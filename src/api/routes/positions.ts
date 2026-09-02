@@ -6,7 +6,7 @@ import { SNAPSHOT_CONFIG } from "../../config.js";
 import { readBalancesTagged } from "../../ec/orderLifecycle.js";
 
 export async function registerPositionRoutes(fastify: FastifyInstance): Promise<void> {
-  // GET /positions — bot_positions table (real, LIVE_ONCHAIN derived)
+  // GET /positions - bot_positions table (real, LIVE_ONCHAIN derived)
   fastify.get("/positions", async (_request, reply) => {
     try {
       const db = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
@@ -22,7 +22,7 @@ export async function registerPositionRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  // GET /orders — open orders (fetchOpenOrders or bot's tracked open orders), LIVE_ONCHAIN
+  // GET /orders - open orders (fetchOpenOrders or bot's tracked open orders), LIVE_ONCHAIN
   // NOTE: ec-core's fetchOpenOrders is authenticated (needs signer). We use withSigner:true when a
   // key is available (same pattern as /portfolio); without a key each market's error is reported
   // honestly per-market rather than fabricated as "no orders".
@@ -51,7 +51,7 @@ export async function registerPositionRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  // GET /portfolio — aggregate: balances (LIVE_ONCHAIN) + positions + totalPnL (DERIVED)
+  // GET /portfolio - aggregate: balances (LIVE_ONCHAIN) + positions + totalPnL (DERIVED)
   fastify.get("/portfolio", async (_request, reply) => {
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
@@ -63,7 +63,7 @@ export async function registerPositionRoutes(fastify: FastifyInstance): Promise<
 
       // Balances require private key, else report unavailable (honest)
       let balances: { nativeWei: string; tUsdcRaw: string; nativeHuman: number; tUsdcHuman: number; collateral: string; dataIntegrity: string } | null = null;
-      let balancesDataIntegrity: string = "LIVE_ONCHAIN unavailable — no PRIVATE_KEY" as const;
+      let balancesDataIntegrity: string = "LIVE_ONCHAIN unavailable - no PRIVATE_KEY" as const;
       try {
         if (process.env.PRIVATE_KEY || process.env.WALLET_PRIVATE_KEY) {
           const ctx = createExchange({ withSigner: true });

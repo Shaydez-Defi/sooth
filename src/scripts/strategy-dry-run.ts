@@ -1,5 +1,5 @@
 /**
- * Dry-run proof — pull live markets → Stage 3 analysis → edgeThreshold.decide() → riskEngine.checkOrder()
+ * Dry-run proof - pull live markets → Stage 3 analysis → edgeThreshold.decide() → riskEngine.checkOrder()
  * Prints what WOULD happen (approved/rejected + reasons) without calling orderLifecycle.
  * Data integrity: LIVE_INDEXER (order book mid/probability) + LIVE_ONCHAIN (expiry, balances, open orders) + DERIVED.
  */
@@ -30,11 +30,11 @@ function buildBotConfig(overrides?: Partial<BotConfig>): BotConfig {
 }
 
 async function main(): Promise<void> {
-  // TEST-ONLY override per brief Step 5 — only when env STRATEGY_TEST_LOOSEN=1, never in default config.
+  // TEST-ONLY override per brief Step 5 - only when env STRATEGY_TEST_LOOSEN=1, never in default config.
   const testLoosen = process.env.STRATEGY_TEST_LOOSEN === "1";
   const loosenNote = testLoosen ? " [TEST-ONLY: MIN_EDGE loosened 0.02→0.005 for verification proof, will revert after]" : "";
 
-  console.log("=== Sooth Strategy Dry-Run — Pipeline Wiring Proof (no real orders) ===\n");
+  console.log("=== Sooth Strategy Dry-Run - Pipeline Wiring Proof (no real orders) ===\n");
   console.log(`Config: ANALYSIS DEPTH_LEVELS=${ANALYSIS_CONFIG.DEPTH_LEVELS} K=${ANALYSIS_CONFIG.K_IMBALANCE_NUDGE} MIN_EDGE=${ANALYSIS_CONFIG.MIN_EDGE}${loosenNote} MIN_LIQUIDITY=${ANALYSIS_CONFIG.MIN_LIQUIDITY} MAX_SPREAD=${ANALYSIS_CONFIG.MAX_SPREAD} (${ANALYSIS_CONFIG.MAX_SPREAD_BPS} bps) MIN_TIME_REMAINING=${ANALYSIS_CONFIG.MIN_TIME_REMAINING}s`);
   console.log(`        BOT maxPosition=${BOT_CONFIG.MAX_POSITION} maxLoss=${BOT_CONFIG.MAX_LOSS} minOrderSize=${BOT_CONFIG.MIN_ORDER_SIZE} maxOrderSize=${BOT_CONFIG.MAX_ORDER_SIZE} defaultSize=${BOT_CONFIG.DEFAULT_ORDER_SIZE}\n`);
 
@@ -44,12 +44,12 @@ async function main(): Promise<void> {
   }
 
   // For TEST-ONLY proof: temporarily loosen edge threshold via monkey-patch of ANALYSIS_CONFIG.
-  // We do not mutate default config — we pass overridden context? Instead we mutate the imported object for this run only.
+  // We do not mutate default config - we pass overridden context? Instead we mutate the imported object for this run only.
   // This is explicitly labeled TEST-ONLY and reverted after (process exits).
   let restoreMinEdge: (() => void) | undefined;
   if (testLoosen) {
     const original = ANALYSIS_CONFIG.MIN_EDGE;
-    // ANALYSIS_CONFIG is const but its property is writable at runtime — we mutate for this dry-run only.
+    // ANALYSIS_CONFIG is const but its property is writable at runtime - we mutate for this dry-run only.
     (ANALYSIS_CONFIG as unknown as Record<string, unknown>).MIN_EDGE = 0.005;
     restoreMinEdge = (): void => {
       (ANALYSIS_CONFIG as unknown as Record<string, unknown>).MIN_EDGE = original;
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const markets = await activeMarkets(ctx);
   console.log(`[LIVE_INDEXER] activeMarkets venue ${ctx.config.venueId ?? "(inferred)"} → ${markets.length} live market(s)`);
   if (markets.length === 0) {
-    console.log("No live markets — nothing to analyze");
+    console.log("No live markets - nothing to analyze");
     await ctx.exchange.close().catch(() => undefined);
     if (restoreMinEdge) restoreMinEdge();
     process.exit(0);
@@ -79,10 +79,10 @@ async function main(): Promise<void> {
       balances = { nativeWei: snap.nativeWei, tUsdcRaw: snap.tUsdcRaw };
       console.log(`[LIVE_ONCHAIN] balances native ${snap.nativeHuman.toFixed(6)} STT tUSDC ${snap.tUsdcHuman.toFixed(6)}`);
     } else {
-      console.log("[LIVE_ONCHAIN] balances unavailable — no PRIVATE_KEY (read-only), risk checks for funded/gas will report unavailable (honest)");
+      console.log("[LIVE_ONCHAIN] balances unavailable - no PRIVATE_KEY (read-only), risk checks for funded/gas will report unavailable (honest)");
     }
   } catch (err) {
-    console.error(`[WARN] readBalancesTagged failed: ${(err as Error).message} — risk funded/gas checks will report unavailable`);
+    console.error(`[WARN] readBalancesTagged failed: ${(err as Error).message} - risk funded/gas checks will report unavailable`);
   }
 
   // Build openPositions from live open orders per market (LIVE_ONCHAIN mirror).
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
         });
       }
     } catch {
-      // ignore per-market fetch failure — not fatal for dry-run
+      // ignore per-market fetch failure - not fatal for dry-run
     }
   }
   console.log(`[LIVE_ONCHAIN] openPositions count ${openPositions.length}\n`);
@@ -193,23 +193,23 @@ async function main(): Promise<void> {
     console.log(`  Strategy [${d.action}${d.side ? ` ${d.side}` : ""}]:`);
     for (const s of d.reasons) console.log(`    - ${s}`);
     if (risk === null) {
-      console.log("  Risk: (not checked — strategy SKIPs, short-circuit proven)");
+      console.log("  Risk: (not checked - strategy SKIPs, short-circuit proven)");
     } else {
       console.log(`  Risk [${risk.approved ? "APPROVED" : "REJECTED"}]:`);
       if (risk.rejectionReasons.length === 0) {
-        console.log("    - approved — all 10 checks passed");
+        console.log("    - approved - all 10 checks passed");
       } else {
         for (const rr of risk.rejectionReasons) console.log(`    - ${rr}`);
       }
-      console.log(`  Execution: ${risk.approved && d.action === "PLACE_ORDER" ? "WOULD CALL placeRestingOrder (dry-run, not called)" : "BLOCKED — no execution"}`);
+      console.log(`  Execution: ${risk.approved && d.action === "PLACE_ORDER" ? "WOULD CALL placeRestingOrder (dry-run, not called)" : "BLOCKED - no execution"}`);
     }
   }
 
   const approvedCount = rows.filter((r) => r.risk?.approved).length;
   const skipCount = rows.filter((r) => r.decision.action === "SKIP").length;
   const rejectedCount = rows.filter((r) => r.risk && !r.risk.approved).length;
-  console.log(`\nSummary: ${rows.length} markets → ${skipCount} SKIP (strategy) ${rejectedCount} REJECTED (risk) ${approvedCount} APPROVED (would execute) — no real orders placed`);
-  if (testLoosen) console.log("Note: TEST-ONLY loosening active this run — thresholds restored on exit, not persisted to config.ts");
+  console.log(`\nSummary: ${rows.length} markets → ${skipCount} SKIP (strategy) ${rejectedCount} REJECTED (risk) ${approvedCount} APPROVED (would execute) - no real orders placed`);
+  if (testLoosen) console.log("Note: TEST-ONLY loosening active this run - thresholds restored on exit, not persisted to config.ts");
 
   console.log(
     "\n[VERIFICATION_JSON] " +

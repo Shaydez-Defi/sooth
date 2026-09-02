@@ -1,9 +1,9 @@
-# Stage 1.5 Verification — DreamDEX Event Contracts on Somnia Testnet
+# Stage 1.5 Verification - DreamDEX Event Contracts on Somnia Testnet
 
 **Date (UTC):** 2026-08-26T18:15:53Z (block 471952078; earlier run block 471944174 at 18:08Z)
 **Environment:** GitHub Codespace (Linux), Node v24.14.0
 **Bot Kit revision:** `vendor/dreamdex-bot-kit` @ `dccd2fd` (same as Stage 1), `@somnia-chain/markets-sdk@0.28.1` (public, `https://registry.npmjs.org/@somnia-chain/markets-sdk/-/markets-sdk-0.28.1.tgz`)
-**Network:** Shannon testnet — `NETWORK=testnet`, `CHAIN_ID=50312`
+**Network:** Shannon testnet - `NETWORK=testnet`, `CHAIN_ID=50312`
 **EC RPC (LIVE_ONCHAIN):** `https://api.infra.testnet.somnia.network` (verified `getChainId() → 50312`)
 **EC Indexer (LIVE_INDEXER):** `https://dev.smk.somnia.host/v1/graphql`
 **Venue:** `0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c` (operator 2, DreamDEX venue per `docs/event-contracts.md:62` and `.env.example`)
@@ -12,15 +12,15 @@
 
 ## What was verified
 
-- [x] Installed `@somnia-chain/markets-sdk@0.28.1` (public) and `@dreamdex-bot-kit/ec-core` (`file:vendor/dreamdex-bot-kit/packages/ec-core`) — mirror of Stage 1 discovery (see `packages/ec-core/package.json:15`)
-- [x] Read-only EC connection via `createExchange({withSigner:false})` — no `PRIVATE_KEY` required, no funds, no SIWE (EC uses local signing, not DreamDEX REST)
-- [x] Venue scoping: without `VENUE_ID` EC throws `Live markets span 2 venues: 0x1a1e… (op 4), 0x6797… (op 2)` — proves multi-venue indexer, requires `VENUE_ID` (verified `packages/ec-core/src/markets.ts:86-96`). With `VENUE_ID=0x6797…` → 8 live markets.
+- [x] Installed `@somnia-chain/markets-sdk@0.28.1` (public) and `@dreamdex-bot-kit/ec-core` (`file:vendor/dreamdex-bot-kit/packages/ec-core`) - mirror of Stage 1 discovery (see `packages/ec-core/package.json:15`)
+- [x] Read-only EC connection via `createExchange({withSigner:false})` - no `PRIVATE_KEY` required, no funds, no SIWE (EC uses local signing, not DreamDEX REST)
+- [x] Venue scoping: without `VENUE_ID` EC throws `Live markets span 2 venues: 0x1a1e… (op 4), 0x6797… (op 2)` - proves multi-venue indexer, requires `VENUE_ID` (verified `packages/ec-core/src/markets.ts:86-96`). With `VENUE_ID=0x6797…` → 8 live markets.
 - [x] On-chain `marketOnchain(marketId)` for a real contract via `client.getMarketOnchain` (authoritative, not indexer lag)
 - [x] Order book via `fetchOrderBook` / `snapshot` (price = YES probability in (0,1), human units), best bid/ask/mid, spread, liquidity (quantities)
 - [x] Time-to-expiry from `onchain.expiry` (unix sec) vs `Date.now()`, headroom via `headroomSec(intervalSec)` (scaled, not fixed)
 - [x] `isTradable` gate on `MARKET_STATUS.Trading === 1` (not indexer `active`)
-- [x] Settlement/claim surface inspected but not executed (read-only): `settledMarkets` via `listBinaryMarkets(status:"Finalized")`, `redeemOutcome`, `maybeClaim` — matches `docs/event-contracts.md:130-137`
-- [x] Auth difference confirmed: spot session-key (`OWNER_ADDRESS` + `OperatorPermissionsRegistry` 0x8005…) **does not apply** to EC — EC is single-key `PRIVATE_KEY` or read-only, venue scoping via `VENUE_ID`/`OPERATOR_ID` only (grep `OWNER_ADDRESS` in `ec-core/src` → 0 hits)
+- [x] Settlement/claim surface inspected but not executed (read-only): `settledMarkets` via `listBinaryMarkets(status:"Finalized")`, `redeemOutcome`, `maybeClaim` - matches `docs/event-contracts.md:130-137`
+- [x] Auth difference confirmed: spot session-key (`OWNER_ADDRESS` + `OperatorPermissionsRegistry` 0x8005…) **does not apply** to EC - EC is single-key `PRIVATE_KEY` or read-only, venue scoping via `VENUE_ID`/`OPERATOR_ID` only (grep `OWNER_ADDRESS` in `ec-core/src` → 0 hits)
 
 ## Contract address / ID used for deep inspection
 
@@ -49,14 +49,14 @@
 | BTC/ETH-0-26AUG26-2000/tUSDC | 4h | both | 14400s | … |
 | BTC/ETH-0-27AUG26/tUSDC | 1d | both | 86400s | … |
 
-> Other venues on same deployment: `0x1a1e6821cde7d0159c0d293177871e09677b4e42307c7db3ba94f8648a5a050f` (op 4, 5 rows total, 2 live at capture), `0xcc69885f…` etc. — proves `VENUE_ID` scoping required.
+> Other venues on same deployment: `0x1a1e6821cde7d0159c0d293177871e09677b4e42307c7db3ba94f8648a5a050f` (op 4, 5 rows total, 2 live at capture), `0xcc69885f…` etc. - proves `VENUE_ID` scoping required.
 
-## Actual script output (provable — not stubbed)
+## Actual script output (provable - not stubbed)
 
 Command: `NETWORK=testnet npx tsx src/scripts/discover-event-contracts.ts` (no private key; script defaults `VENUE_ID` to documented testnet venue if unset, see `src/scripts/discover-event-contracts.ts:22-26`)
 
 ```text
-=== DreamDEX Trading Intelligence — Stage 1.5 EC Discovery ===
+=== DreamDEX Trading Intelligence - Stage 1.5 EC Discovery ===
 
 Network      : testnet (chainId=50312)
 RPC URL      : https://api.infra.testnet.somnia.network
@@ -69,7 +69,7 @@ Tick/Lot     : 1000 / 1 (raw)
 DryRun       : true
 
 [LIVE_INDEXER] resolveVenue: source=env markets=8 scope={"venueId":"0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c"}
-[RPC] Connected — chainId=50312, block=471952078
+[RPC] Connected - chainId=50312, block=471952078
 
 [LIVE_INDEXER] activeMarkets (via venue 0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c) → 8 market(s)
 
@@ -130,7 +130,7 @@ DryRun       : true
   pool status finalized=false
 
 [INFO] EC order placement uses ec-core placeLimit (tick/lot as ints, via trader.placeOrder), not spot Pool.place. See docs/bot-kit-summary.md §8h.
-[INFO] Settlement via redeemOutcome/settledMarkets; this script is read-only — no mint/claim sent.
+[INFO] Settlement via redeemOutcome/settledMarkets; this script is read-only - no mint/claim sent.
 
 === Verification: hit real EC venue 0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c on chain 50312, market 0x000000000000000000000000000000000000000000000000000000000000a558, pool 0x3ae79C8A2C3197B57Af3715B74BA1E96BCE82607 ===
 ```
@@ -153,16 +153,16 @@ npm run discover:ec        # defaults VENUE_ID to 0x6797… if unset, NETWORK=te
 VENUE_ID=0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c NETWORK=testnet npx tsx src/scripts/discover-event-contracts.ts
 ```
 
-No private key needed — `createExchange({withSigner:false})` reads via indexer + `getMarketOnchain` + `fetchOrderBook`.
+No private key needed - `createExchange({withSigner:false})` reads via indexer + `getMarketOnchain` + `fetchOrderBook`.
 
 ## Stop conditions checked
 
 - `@somnia-chain/markets-sdk@0.28.1`: **found and public** (`https://registry.npmjs.org/.../markets-sdk-0.28.1.tgz`, `packages/ec-core/package.json:15`)
-- EC requires materially different auth than spot: **yes, but read-only verified without it** — EC has no `OWNER_ADDRESS`/`OperatorPermissionsRegistry`; it uses single-key `PRIVATE_KEY` or none. Read-only works; write would need `PRIVATE_KEY` but not for this discovery.
-- `ec-*` strategies reference methods: **all exist** — `createExchange`, `activeMarkets`, `marketOnchain`, `snapshot`/`fetchOrderBook`, `placeLimit` (via `exchange.trader.placeOrder`), `cancelTracked`/`cancelById`, `maybeClaim`/`settledMarkets` etc. verified in `packages/ec-core/src/*` and installed `node_modules/@somnia-chain/markets-sdk`.
+- EC requires materially different auth than spot: **yes, but read-only verified without it** - EC has no `OWNER_ADDRESS`/`OperatorPermissionsRegistry`; it uses single-key `PRIVATE_KEY` or none. Read-only works; write would need `PRIVATE_KEY` but not for this discovery.
+- `ec-*` strategies reference methods: **all exist** - `createExchange`, `activeMarkets`, `marketOnchain`, `snapshot`/`fetchOrderBook`, `placeLimit` (via `exchange.trader.placeOrder`), `cancelTracked`/`cancelById`, `maybeClaim`/`settledMarkets` etc. verified in `packages/ec-core/src/*` and installed `node_modules/@somnia-chain/markets-sdk`.
 
 ## Technical checks
 
 - `npx tsc --noEmit` → PASS
 - `npx eslint src` → PASS
-- `npx vitest run` → PASS (existing tests; EC path not touching money in this read-only stage — no new money module yet)
+- `npx vitest run` → PASS (existing tests; EC path not touching money in this read-only stage - no new money module yet)

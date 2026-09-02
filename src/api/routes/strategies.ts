@@ -6,7 +6,7 @@ import { runBacktest, type SettledMarket } from "../../backtest/engine.js";
 import { ANALYSIS_CONFIG } from "../../config.js";
 
 export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<void> {
-  // POST /strategies/analyze — Stage 3's engine, single market or all
+  // POST /strategies/analyze - Stage 3's engine, single market or all
   fastify.post("/strategies/analyze", async (request, reply) => {
     const body = (request.body as { marketId?: string; symbol?: string; all?: boolean } | undefined) ?? {};
     const { marketId, symbol, all } = body as Record<string, unknown>;
@@ -63,7 +63,7 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  // POST /strategies/backtest — Stage 4's engine, params in body (symbol/market scope, thresholds override if provided)
+  // POST /strategies/backtest - Stage 4's engine, params in body (symbol/market scope, thresholds override if provided)
   fastify.post("/strategies/backtest", async (request, reply) => {
     const body = request.body as { limit?: number; startingCapital?: number; sizePerTrade?: number; thresholds?: Partial<typeof ANALYSIS_CONFIG> } | undefined;
     if (body !== undefined && typeof body !== "object") {
@@ -82,15 +82,15 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
       return reply.status(400).send({ error: "sizePerTrade must be positive number", dataIntegrity: "DERIVED" as const });
     }
     // thresholds override: if provided, validate they are numbers in (0,1) etc., but don't mutate global ANALYSIS_CONFIG
-    // We will handle override by temporarily patching ANALYSIS_CONFIG for the run if needed — for now just note and use defaults
-    // The brief says thresholds override if provided — we support changing MIN_EDGE etc. via body thresholds and apply to engine
+    // We will handle override by temporarily patching ANALYSIS_CONFIG for the run if needed - for now just note and use defaults
+    // The brief says thresholds override if provided - we support changing MIN_EDGE etc. via body thresholds and apply to engine
     const thresholds = body?.thresholds;
     let patched: Partial<typeof ANALYSIS_CONFIG> | null = null;
     if (thresholds) {
       patched = {};
       for (const [k, v] of Object.entries(thresholds)) {
         if (!(k in ANALYSIS_CONFIG)) {
-          return reply.status(400).send({ error: `unknown threshold ${k} — allowed: ${Object.keys(ANALYSIS_CONFIG).join(", ")}`, dataIntegrity: "DERIVED" as const });
+          return reply.status(400).send({ error: `unknown threshold ${k} - allowed: ${Object.keys(ANALYSIS_CONFIG).join(", ")}`, dataIntegrity: "DERIVED" as const });
         }
         if (typeof v !== "number" || !Number.isFinite(v)) {
           return reply.status(400).send({ error: `threshold ${k} must be finite number`, dataIntegrity: "DERIVED" as const });
@@ -117,7 +117,7 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
       const rows = await ctx.exchange.client.listBinaryMarkets({ venueId, status: "Finalized", limit });
       await ctx.exchange.close().catch(() => undefined);
       if (rows.length === 0) {
-        return reply.send({ data: { metrics: null, note: "no settled markets — insufficient-data (fresh venue)", dataIntegrity: "HISTORICAL" as const }, dataIntegrity: "HISTORICAL/DERIVED" as const });
+        return reply.send({ data: { metrics: null, note: "no settled markets - insufficient-data (fresh venue)", dataIntegrity: "HISTORICAL" as const }, dataIntegrity: "HISTORICAL/DERIVED" as const });
       }
 
       // Build SettledMarket with ESTIMATED synthetic balanced book around lastPrice (per Stage 4)

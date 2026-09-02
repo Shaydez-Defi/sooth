@@ -1,5 +1,5 @@
 /**
- * Backtest runner for EC — now uses REAL historical order-book snapshots when available.
+ * Backtest runner for EC - now uses REAL historical order-book snapshots when available.
  * Data integrity: HISTORICAL marketId/expiry/winningOutcome from indexer, HISTORICAL order-book
  * snapshots from data/snapshots.db when captured while market was live (capturedAtUnix < expiry),
  * ESTIMATED synthetic balanced fallback when no snapshot coverage, DERIVED P&L.
@@ -24,7 +24,7 @@ function rawPriceToProb(raw: string | null, decimals = 6): number | null {
 }
 
 async function main(): Promise<void> {
-  console.log("=== Sooth EC Backtest — REAL Historical Books (Stage 10) ===\n");
+  console.log("=== Sooth EC Backtest - REAL Historical Books (Stage 10) ===\n");
   console.log(`Config: DEPTH_LEVELS=${ANALYSIS_CONFIG.DEPTH_LEVELS}, K=${ANALYSIS_CONFIG.K_IMBALANCE_NUDGE}, MIN_EDGE=${ANALYSIS_CONFIG.MIN_EDGE}, size=${SIZE_PER_TRADE}, startingCapital=${STARTING_CAPITAL}\n`);
   console.log("Data tags: HISTORICAL = settled marketId/expiry/winningOutcome + order-book snapshots where captured while live (capturedAtUnix < expiry, from data/snapshots.db)");
   console.log("           ESTIMATED = synthetic single-point balanced book fallback where no snapshot coverage (clearly tagged per-market)");
@@ -37,10 +37,10 @@ async function main(): Promise<void> {
   const limit = 50;
   const rows = await ctx.exchange.client.listBinaryMarkets({ venueId: ctx.config.venueId as `0x${string}`, status: "Finalized", limit });
   console.log(`[HISTORICAL] listBinaryMarkets venue ${ctx.config.venueId} status Finalized limit ${limit} → ${rows.length} markets`);
-  console.log(`[HISTORICAL] (also checked data/snapshots.db: logger has run since 2026-08-28T00:17:03.660Z, 1400 rows for 28 markets — see stage-logger-verification.md)`);
+  console.log(`[HISTORICAL] (also checked data/snapshots.db: logger has run since 2026-08-28T00:17:03.660Z, 1400 rows for 28 markets - see stage-logger-verification.md)`);
 
   if (rows.length === 0) {
-    console.log("\n[STOP] No historical/settled EC market data accessible at all — fresh venue, short-lived markets.");
+    console.log("\n[STOP] No historical/settled EC market data accessible at all - fresh venue, short-lived markets.");
     console.log("Per brief: never fabricate synthetic candles for EC.");
     await ctx.exchange.close().catch(() => undefined);
     process.exit(0);
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   console.log(`\n[DERIVED] Matched snapshots to settled markets (capturedAtUnix < expiry, per-market):`);
   console.log(`  with ≥1 real snapshot (HISTORICAL multi-snapshot path): ${withHistory}/${settledMetas.length}`);
   console.log(`  with zero snapshots (ESTIMATED single-point fallback): ${withoutHistory}/${settledMetas.length}`);
-  console.log(`  (logger only started 2026-08-28T00:17:03.660Z — markets that expired before then have zero coverage, honestly reported)`);
+  console.log(`  (logger only started 2026-08-28T00:17:03.660Z - markets that expired before then have zero coverage, honestly reported)`);
 
   // Show per-market snapshot counts for the HISTORICAL subset (first 10)
   const histWithSnap = histories.filter((h) => h.dataPath === "HISTORICAL").slice(0, 10);
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     if (withHistory > histWithSnap.length) console.log(`  … and ${withHistory - histWithSnap.length} more HISTORICAL markets`);
   }
 
-  // Run historical backtest — genuine intra-market repricing for HISTORICAL, single-point for ESTIMATED
+  // Run historical backtest - genuine intra-market repricing for HISTORICAL, single-point for ESTIMATED
   const metrics = runBacktestWithHistory({ markets: histories, startingCapital: STARTING_CAPITAL, sizePerTrade: SIZE_PER_TRADE });
 
   console.log(`\n=== Backtest Metrics (brief's exact list, now with HISTORICAL vs ESTIMATED split) ===`);
@@ -113,7 +113,7 @@ async function main(): Promise<void> {
 
   console.log("\n=== Per-Trade P&L (real market IDs, real resolved outcomes, real computed P&L, tagged HISTORICAL vs ESTIMATED) ===");
   if (metrics.trades.length === 0) {
-    console.log("(no trades — engine returned NO_TRADE for all markets; HISTORICAL path also 0 if imbalance stayed flat during those markets' lives — honest)");
+    console.log("(no trades - engine returned NO_TRADE for all markets; HISTORICAL path also 0 if imbalance stayed flat during those markets' lives - honest)");
     console.log("Note: with real snapshot history, imbalance is 0.000 balanced for most polls (house quotes 990/990), so edge 0 < minEdge 0.02 → NO_TRADE, same as Stage 4. A synthetic imbalance shift would trigger TRADE at the right snapshot (see historicalBooks.test.ts).");
   } else {
     // Call out HISTORICAL trades separately per brief

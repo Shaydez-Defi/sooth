@@ -1,7 +1,7 @@
 import { COLOR } from "./theme";
 import type { DataIntegrityTag } from "../lib/api";
 
-// Must be typed and preserved in UI, not dropped — shows data-integrity tags per brief Step 5
+// Must be typed and preserved in UI, not dropped - shows data-integrity tags per brief Step 5
 const TAG_COLOR: Record<string, string> = {
   LIVE_ONCHAIN: "#6B9E78",
   LIVE_INDEXER: "#CC8899",

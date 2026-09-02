@@ -3,7 +3,7 @@ import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, CartesianG
 import { Play } from "lucide-react";
 import { ApiError, postAnalyze, postBacktest, getMarkets, type MarketAnalysis, type BacktestMetrics } from "../lib/api";
 
-// Preserved verbatim from sooth-strategy-lab.jsx — inline duplication flagged as follow-up
+// Preserved verbatim from sooth-strategy-lab.jsx - inline duplication flagged as follow-up
 const COLOR = {
   ink: "#0A0908",
   surface: "#14130F",
@@ -52,7 +52,7 @@ function SignalAnalysisPanel({ analysis, marketLabel }: { analysis: MarketAnalys
   const tier = analysis.recommendation === "TRADE" ? "TRADE" : Math.abs(analysis.edge) >= 0.02 ? "WAIT" : "NO TRADE";
   return (
     <div className="sooth-glass-card">
-      <PanelHeader right={<SignalBadge tier={tier} />}>Signal analysis — {marketLabel}</PanelHeader>
+      <PanelHeader right={<SignalBadge tier={tier} />}>Signal analysis - {marketLabel}</PanelHeader>
       <div style={{ display: "flex", gap: 32, marginBottom: SPACE.panel }}>
         <div><div style={PANEL_LABEL_STYLE}>Market prob.</div><div style={{ fontFamily: "monospace", fontSize: 24, fontWeight: 700, marginTop: 4 }}>{pct(analysis.marketProbability)}</div></div>
         <div><div style={PANEL_LABEL_STYLE}>Sooth est.</div><div style={{ fontFamily: "monospace", fontSize: 24, fontWeight: 700, marginTop: 4, color: COLOR.accent }}>{pct(analysis.estimatedProbability)}</div></div>
@@ -162,8 +162,8 @@ function EdgeBreakdownChart({ trades }: { trades: Array<{ won: boolean }> }) {
 
 function TradeHistoryTable({ trades }: { trades: BacktestMetrics["trades"] }) {
   if (trades.length === 0) return <div className="sooth-glass-card" style={{ marginTop: SPACE.panel }}><PanelHeader>Trade history</PanelHeader><div style={{ fontSize: 13, color: COLOR.faint }}>No trades in this backtest window.</div></div>;
-  // Preserved verbatim layout from sooth-strategy-lab.jsx: Entry, Exit, Side, P&L, Result — byte-for-byte identical columns
-  // Live bookTag provenance preserved via typed API but not added as new column — flagged as follow-up to keep visuals identical
+  // Preserved verbatim layout from sooth-strategy-lab.jsx: Entry, Exit, Side, P&L, Result - byte-for-byte identical columns
+  // Live bookTag provenance preserved via typed API but not added as new column - flagged as follow-up to keep visuals identical
   return (
     <div className="sooth-glass-card" style={{ marginTop: SPACE.panel, overflowX: "auto" }}>
       <PanelHeader>Trade history</PanelHeader>
@@ -173,7 +173,7 @@ function TradeHistoryTable({ trades }: { trades: BacktestMetrics["trades"] }) {
           {trades.slice(0, 20).map((t, i) => (
             <tr key={i} style={{ borderTop: `1px solid ${COLOR.border}` }}>
               <td style={{ padding: "9px 0", fontFamily: "monospace" }}>{pct(t.entryPrice)}</td>
-              <td style={{ padding: "9px 0", fontFamily: "monospace" }}>—</td>
+              <td style={{ padding: "9px 0", fontFamily: "monospace" }}>-</td>
               <td style={{ padding: "9px 0", fontFamily: "monospace", color: COLOR.muted }}>{t.direction}</td>
               <td style={{ padding: "9px 0", fontFamily: "monospace", textAlign: "right", color: t.pnl >= 0 ? COLOR.up : COLOR.down }}>{t.pnl >= 0 ? `+$${t.pnl.toFixed(2)}` : `-$${Math.abs(t.pnl).toFixed(2)}`}</td>
               <td style={{ padding: "9px 0", textAlign: "right", fontFamily: "monospace", color: t.won ? COLOR.up : COLOR.down }}>{t.won ? "Win" : "Loss"}</td>
@@ -224,7 +224,7 @@ export default function StrategyLab() {
         const res = await postBacktest({ limit: 50, startingCapital: 1000, sizePerTrade: 1 });
         if (res.data.metrics === null) {
           setMetrics(null);
-          setBacktestNote(res.data.note ?? "No settled markets — insufficient data");
+          setBacktestNote(res.data.note ?? "No settled markets - insufficient data");
         } else {
           setMetrics(res.data.metrics);
         }
@@ -289,10 +289,10 @@ export default function StrategyLab() {
                   <>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: SPACE.block }}>
                       <StatCard label="Trades" value={metrics.numberOfTrades} />
-                      <StatCard label="Win rate" value={metrics.numberOfTrades ? `${(metrics.winRate * 100).toFixed(0)}%` : "—"} color={COLOR.up} />
+                      <StatCard label="Win rate" value={metrics.numberOfTrades ? `${(metrics.winRate * 100).toFixed(0)}%` : "-"} color={COLOR.up} />
                       <StatCard label="Avg edge" value={`${(metrics.averageEdge * 100).toFixed(1)}%`} />
                       <StatCard label="Max drawdown" value={`${metrics.maximumDrawdown.toFixed(2)}`} color={COLOR.down} />
-                      <StatCard label="Gas cost" value="—" />
+                      <StatCard label="Gas cost" value="-" />
                     </div>
                     <EquityCurveChart startingCapital={metrics.startingCapital} trades={[...metrics.trades]} />
                     <EdgeBreakdownChart trades={[...metrics.trades]} />

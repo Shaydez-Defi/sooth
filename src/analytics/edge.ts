@@ -1,5 +1,5 @@
 /**
- * Edge Analytics — brief §10, computed from REAL bot_fills/bot_positions (not fabricated).
+ * Edge Analytics - brief §10, computed from REAL bot_fills/bot_positions (not fabricated).
  * Metrics: Gross PnL, Net PnL after gas, Win rate, Average edge, Realized edge, Drawdown,
  * Gas cost, Execution quality, Adverse selection.
  * If 0 real fills, return insufficient-data, not fabricated numbers.
@@ -24,7 +24,7 @@ export interface EdgeMetrics {
   readonly openPositions: number; // still-unrealized positions (excluded from win rate)
   readonly averageEdge: number | null; // mean edgeAtDecision for fills where captured (HISTORICAL)
   readonly realizedEdge: number | null; // mean realized PnL per closed position (tUSDC, DERIVED from real settlement/early-close data)
-  readonly maximumDrawdown: number | null; // Stage 4's peak-to-trough logic over cumulative realized PnL series — null when series unavailable, reason in gaps[]
+  readonly maximumDrawdown: number | null; // Stage 4's peak-to-trough logic over cumulative realized PnL series - null when series unavailable, reason in gaps[]
   readonly executionQuality: number | null; // avg (fillPrice - midAtDecision) for fills where both present
   readonly adverseSelection: number | null; // mean (fillPrice - postFillMid) signed by side over fills with a real nearby snapshot; null when none computable
   readonly insufficientDataReason: string | null;
@@ -65,7 +65,7 @@ interface FillObservedPnlSeriesPoint {
  * Cumulative realized PnL time series from persisted bot_events.
  * Stage 7's runner recorded FILL_OBSERVED with `data.newRealizedPnL`; Stage 9's settlement poller
  * records SETTLEMENT_REALIZED with `data.cumulativeRealizedPnL`. Both are real captured data.
- * We read both event types and normalize to a single series — parse failures go to `gaps`.
+ * We read both event types and normalize to a single series - parse failures go to `gaps`.
  */
 function readRealizedPnlSeries(db: Database.Database, gaps: string[]): FillObservedPnlSeriesPoint[] {
   const rows = db
@@ -90,7 +90,7 @@ function readRealizedPnlSeries(db: Database.Database, gaps: string[]): FillObser
       continue;
     }
     // Also handle nested positionUpdate.result.cumulative? No, we already handled top-level.
-    // Events without a PnL point (e.g. raw-topic FILL_OBSERVED without fill) are expected — not a gap.
+    // Events without a PnL point (e.g. raw-topic FILL_OBSERVED without fill) are expected - not a gap.
   }
   return series;
 }
@@ -130,7 +130,7 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   const gaps: string[] = [];
 
   // Gas cost: sum gasCost where recorded (LIVE_ONCHAIN). Fallback computes from gasUsed*gasPrice
-  // only when both are well-formed unsigned-int strings — unparseable values are reported in gaps, not ignored.
+  // only when both are well-formed unsigned-int strings - unparseable values are reported in gaps, not ignored.
   let gasCost = 0;
   let gasRecorded = 0;
   for (const f of fills) {
@@ -144,7 +144,7 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
       gasCost += computed;
       gasRecorded += 1;
     } else if (f.gasUsed !== null || f.gasPrice !== null) {
-      gaps.push(`fill tx=${f.txHash} has incomplete/unparseable gas fields (gasUsed=${String(f.gasUsed)}, gasPrice=${String(f.gasPrice)}) — excluded from gas cost`);
+      gaps.push(`fill tx=${f.txHash} has incomplete/unparseable gas fields (gasUsed=${String(f.gasUsed)}, gasPrice=${String(f.gasPrice)}) - excluded from gas cost`);
     }
   }
   const netPnL = grossPnL - gasCost;
@@ -171,7 +171,7 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   // Win rate / realized edge (Stage 9): from REAL per-position realized P&L. A resolved "trade" is a
   // position lifecycle built by buy fills and realized exactly once by either SETTLEMENT (market
   // resolved/voided on-chain → Stage 4 payout formula) or EARLY_CLOSE (exited by an opposite-side
-  // fill before settlement). Only status CLOSED positions count — never-guessed for open ones.
+  // fill before settlement). Only status CLOSED positions count - never-guessed for open ones.
   const closedPositions = positions.filter((p) => p.status === "CLOSED");
   const openPositions = positions.filter((p) => p.status === "OPEN");
   const winningTrades = closedPositions.filter((p) => p.realizedPnL > 0).length;
@@ -182,9 +182,9 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   if (closedPositions.length === 0) {
     const openDesc =
       openPositions.length === 0
-        ? "no positions exist — no fill has been applied to the position model"
+        ? "no positions exist - no fill has been applied to the position model"
         : `${openPositions.length} open position(s) still unrealized (cost basis built, no SETTLEMENT/EARLY_CLOSE realized yet)`;
-    gaps.push(`winRate/winningTrades/losingTrades/realizedEdge: ${openDesc} — wins/losses only derivable from realized (CLOSED) positions`);
+    gaps.push(`winRate/winningTrades/losingTrades/realizedEdge: ${openDesc} - wins/losses only derivable from realized (CLOSED) positions`);
   } else if (openPositions.length > 0) {
     gaps.push(`winRate/winningTrades/losingTrades/realizedEdge: computed over ${closedPositions.length} closed position(s); ${openPositions.length} open position(s) excluded (still unrealized)`);
   }
@@ -194,12 +194,12 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   const pnlSeries = readRealizedPnlSeries(db, gaps);
   const maximumDrawdown = pnlSeries.length > 0 ? peakToTroughDrawdown(pnlSeries.map((p) => p.cumulativeRealizedPnL)) : null;
   if (maximumDrawdown === null) {
-    gaps.push("maximumDrawdown: no FILL_OBSERVED event carries newRealizedPnL — cumulative PnL series unavailable");
+    gaps.push("maximumDrawdown: no FILL_OBSERVED event carries newRealizedPnL - cumulative PnL series unavailable");
   }
 
   // Adverse selection (Stage 9): per real fill, find the closest real snapshot mid to
   // fill_time + LOOKAHEAD for the same marketId from snapshots.db. A snapshot within
-  // ±MAX_DEVIATION counts; otherwise that specific fill is reported NOT COMPUTABLE — no
+  // ±MAX_DEVIATION counts; otherwise that specific fill is reported NOT COMPUTABLE - no
   // interpolation. Sign: positive = mid moved against our side after the fill (bought high/sold low).
   const lookahead = ADVERSE_SELECTION_CONFIG.LOOKAHEAD_SECONDS;
   const maxDev = ADVERSE_SELECTION_CONFIG.MAX_DEVIATION_SECONDS;
@@ -207,18 +207,18 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   let adverseSum = 0;
   for (const f of fills) {
     if (f.side === null || f.outcome === null) {
-      gaps.push(`adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…): side/outcome not recorded (predates Stage 9 or raw-topic decode) — not computable`);
+      gaps.push(`adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…): side/outcome not recorded (predates Stage 9 or raw-topic decode) - not computable`);
       continue;
     }
     if (f.fillPrice === null || !Number.isFinite(f.fillPrice) || !(f.capturedAtUnix > 0)) {
-      gaps.push(`adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…): no fillPrice/capturedAt recorded — not computable`);
+      gaps.push(`adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…): no fillPrice/capturedAt recorded - not computable`);
       continue;
     }
     const target = f.capturedAtUnix + lookahead;
     const snap = closestSnapshotMid(db, f.marketId, target, maxDev);
     if (snap === null) {
       gaps.push(
-        `adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…, marketId=${f.marketId}): no snapshot within ±${maxDev}s of fill+${lookahead}s (fill time ${new Date(f.capturedAtUnix * 1000).toISOString()}) — NOT COMPUTABLE, no interpolation`,
+        `adverseSelection fill id=${f.id} (tx=${f.txHash.slice(0, 18)}…, marketId=${f.marketId}): no snapshot within ±${maxDev}s of fill+${lookahead}s (fill time ${new Date(f.capturedAtUnix * 1000).toISOString()}) - NOT COMPUTABLE, no interpolation`,
       );
       continue;
     }
@@ -228,7 +228,7 @@ export function computeEdgeAnalytics(db: Database.Database): EdgeAnalyticsResult
   }
   const adverseSelection = adverseSamples > 0 ? adverseSum / adverseSamples : null;
   if (adverseSelection === null) {
-    gaps.push(`adverseSelection: no fill has a computable post-fill mid (needs a real snapshot within ±${maxDev}s of fill+${lookahead}s) — see per-fill reasons above`);
+    gaps.push(`adverseSelection: no fill has a computable post-fill mid (needs a real snapshot within ±${maxDev}s of fill+${lookahead}s) - see per-fill reasons above`);
   }
 
   const metrics: EdgeMetrics = {

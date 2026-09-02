@@ -1,8 +1,8 @@
 /**
- * Historical Books — match real snapshot order-book history to settled markets.
+ * Historical Books - match real snapshot order-book history to settled markets.
  * Queries data/snapshots.db for snapshots captured while the market was still live
  * (capturedAtUnix < market.expiry) for each settled marketId.
- * Not every settled market will have coverage — the logger only started 2026-08-28
+ * Not every settled market will have coverage - the logger only started 2026-08-28
  * 00:17. Report exactly how many have ≥1 vs zero, honestly. Markets with zero
  * keep using Stage 4's ESTIMATED fallback, clearly tagged per-market.
  * Tags: LIVE_INDEXER for book levels/mid, DERIVED for depth/imbalance, LIVE_ONCHAIN for marketId/expiry.

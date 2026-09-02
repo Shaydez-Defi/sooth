@@ -1,5 +1,5 @@
 /**
- * Market Intelligence Engine — deterministic, explainable, DreamDEX-only.
+ * Market Intelligence Engine - deterministic, explainable, DreamDEX-only.
  * Only signal source is order-book imbalance on YES book (bid vs ask depth).
  * No external data, no historical, no fallback to other venues.
  */
@@ -11,13 +11,13 @@ export interface EngineInput {
   // LIVE_ONCHAIN
   readonly marketId: string; // LIVE_ONCHAIN
   readonly symbol: string; // LIVE_INDEXER
-  // LIVE_INDEXER — YES book levels as [price (prob), quantity (shares)]
+  // LIVE_INDEXER - YES book levels as [price (prob), quantity (shares)]
   readonly bids: ReadonlyArray<readonly [number, number]>; // LIVE_INDEXER
   readonly asks: ReadonlyArray<readonly [number, number]>; // LIVE_INDEXER
-  // LIVE_INDEXER — derived from book but considered market price
+  // LIVE_INDEXER - derived from book but considered market price
   readonly bestBid: number | undefined; // LIVE_INDEXER
   readonly bestAsk: number | undefined; // LIVE_INDEXER
-  readonly marketProbability: number | undefined; // LIVE_INDEXER — YES mid
+  readonly marketProbability: number | undefined; // LIVE_INDEXER - YES mid
   // LIVE_ONCHAIN
   readonly timeRemaining: number | undefined; // LIVE_ONCHAIN seconds
 }
@@ -31,7 +31,7 @@ export interface EngineInput {
  * estimatedProbability = clamp(marketProbability + k * imbalance, 0.01, 0.99)
  *   where k = K_IMBALANCE_NUDGE (small tilt, e.g. 0.06), marketProbability is YES mid
  *
- * This is a tilt, not an independent prediction — at most k away from market.
+ * This is a tilt, not an independent prediction - at most k away from market.
  */
 export function computeEstimatedProbability(marketProbability: number, imbalance: number, k: number): number {
   const raw = marketProbability + k * imbalance;
@@ -43,7 +43,7 @@ function clamp01(n: number): number {
 }
 
 export function analyzeMarket(input: EngineInput): MarketAnalysis {
-  // Fail-safe wrapper — never throw, never fabricate, return NO_TRADE with reasons
+  // Fail-safe wrapper - never throw, never fabricate, return NO_TRADE with reasons
   try {
     return analyzeMarketInner(input);
   } catch (err) {
@@ -61,7 +61,7 @@ export function analyzeMarket(input: EngineInput): MarketAnalysis {
       timeRemaining: input.timeRemaining ?? 0,
       signalStrength: 0,
       recommendation: "NO_TRADE",
-      reasons: [`order-book imbalance: engine failed safe — ${msg}`],
+      reasons: [`order-book imbalance: engine failed safe - ${msg}`],
       imbalance: 0,
     };
   }
@@ -70,7 +70,7 @@ export function analyzeMarket(input: EngineInput): MarketAnalysis {
 function analyzeMarketInner(input: EngineInput): MarketAnalysis {
   const { marketId, symbol, bids, asks, bestBid, bestAsk, marketProbability, timeRemaining } = input;
 
-  // Validate required fields — missing → NO_TRADE fail-safe
+  // Validate required fields - missing → NO_TRADE fail-safe
   if (!marketId || !symbol) {
     return {
       marketId: marketId ?? "unknown",
@@ -85,7 +85,7 @@ function analyzeMarketInner(input: EngineInput): MarketAnalysis {
       timeRemaining: timeRemaining ?? 0,
       signalStrength: 0,
       recommendation: "NO_TRADE",
-      reasons: ["order-book imbalance: missing marketId/symbol — no book depth to assess"],
+      reasons: ["order-book imbalance: missing marketId/symbol - no book depth to assess"],
       imbalance: 0,
     };
   }
@@ -150,7 +150,7 @@ function analyzeMarketInner(input: EngineInput): MarketAnalysis {
   const midForBps = marketProbability;
   const spreadBps = midForBps > 0 && Number.isFinite(spread) ? (spread / midForBps) * 10000 : Infinity; // DERIVED
 
-  // Time remaining — if missing, treat as 0 → will trigger NO_TRADE
+  // Time remaining - if missing, treat as 0 → will trigger NO_TRADE
   const timeRem = timeRemaining !== undefined && Number.isFinite(timeRemaining) ? timeRemaining : 0;
 
   // Direction from edge
@@ -159,9 +159,9 @@ function analyzeMarketInner(input: EngineInput): MarketAnalysis {
     direction = edge > 0 ? "YES" : "NO";
   }
 
-  // Gating checks — all thresholds from config, no inline magic numbers
+  // Gating checks - all thresholds from config, no inline magic numbers
   const reasons: string[] = [];
-  // Primary derivation reason — must always be present and name source
+  // Primary derivation reason - must always be present and name source
   const imbalanceSign = imbalance > 0 ? "bid-heavy" : imbalance < 0 ? "ask-heavy" : "balanced";
   const tilt = k * imbalance;
   reasons.push(

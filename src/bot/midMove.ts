@@ -1,5 +1,5 @@
 /**
- * Mid-price movement observability — NOT a trading signal.
+ * Mid-price movement observability - NOT a trading signal.
  * For each market on each tick: compare current mid (LIVE_INDEXER) to most recent
  * prior snapshot for that market in data/snapshots.db. If abs change exceeds
  * MID_MOVE_ALERT_THRESHOLD (e.g. 0.025), log distinctly as MID_MOVE_OBSERVED.
@@ -33,7 +33,7 @@ export interface MidMoveResult {
 
 /**
  * Check mid move against last snapshot and log if over threshold.
- * Does NOT feed strategy or risk — purely informational.
+ * Does NOT feed strategy or risk - purely informational.
  * Returns result and logs MID_MOVE_OBSERVED event when moved=true.
  */
 export function checkMidMove(
@@ -63,7 +63,7 @@ export function checkMidMove(
   if (overThreshold) {
     const signedDelta = params.currentMid - prior.mid;
     const sign = signedDelta >= 0 ? "+" : "";
-    const msg = `[MID_MOVE] ${params.symbol} mid ${prior.mid.toFixed(3)} → ${params.currentMid.toFixed(3)} (${sign}${signedDelta.toFixed(3)}) over ${elapsedSec}s (block ${String(prior.blockNumber ?? "—")} → ${String(params.currentBlockNumber ?? "—")})`;
+    const msg = `[MID_MOVE] ${params.symbol} mid ${prior.mid.toFixed(3)} → ${params.currentMid.toFixed(3)} (${sign}${signedDelta.toFixed(3)}) over ${elapsedSec}s (block ${String(prior.blockNumber ?? "-")} → ${String(params.currentBlockNumber ?? "-")})`;
     // Log to stdout and to persisted events table
     console.log(msg);
     logEvent(db, {

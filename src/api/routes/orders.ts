@@ -10,7 +10,7 @@ import type { StrategyDecision } from "../../strategy/types.js";
 export async function registerOrderRoutes(fastify: FastifyInstance): Promise<void> {
   const orderState = createOrderState();
 
-  // POST /orders — manual order placement, MUST pass through riskEngine.checkOrder first
+  // POST /orders - manual order placement, MUST pass through riskEngine.checkOrder first
   fastify.post("/orders", async (request, reply) => {
     const body = request.body as { marketId?: string; symbol?: string; side?: string; price?: number; size?: number } | undefined;
     if (!body || typeof body !== "object") {
@@ -61,7 +61,7 @@ export async function registerOrderRoutes(fastify: FastifyInstance): Promise<voi
         reasons: [`manual POST /orders for ${found.symbol} ${sideNorm} ${price} x${size}`],
       };
 
-      // Risk check — MUST not skip, document that manual orders don't bypass risk
+      // Risk check - MUST not skip, document that manual orders don't bypass risk
       const db = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
       const positions = getBotPositions(db).map((p) => ({ marketId: p.marketId, symbol: p.symbol, side: "YES" as const, size: p.netPosition }));
       const totalPnL = getTotalRealizedPnL(db);
@@ -83,7 +83,7 @@ export async function registerOrderRoutes(fastify: FastifyInstance): Promise<voi
         bookBids = raw.bids;
         bookAsks = raw.asks;
       } catch {
-        // leave empty — risk will handle liquidity check
+        // leave empty - risk will handle liquidity check
       }
       const bestBid = bookBids[0]?.[0];
       const bestAsk = bookAsks[0]?.[0];
@@ -105,7 +105,7 @@ export async function registerOrderRoutes(fastify: FastifyInstance): Promise<voi
         timeRemaining,
         signalStrength: 0,
         recommendation: "TRADE" as const,
-        reasons: [`manual order — book mid ${mid.toFixed(4)}`],
+        reasons: [`manual order - book mid ${mid.toFixed(4)}`],
         imbalance: 0,
       };
 
@@ -136,7 +136,7 @@ export async function registerOrderRoutes(fastify: FastifyInstance): Promise<voi
           error: "manual order rejected by risk engine (risk checks are NOT bypassed for POST /orders)",
           dataIntegrity: "DERIVED" as const,
           risk: { approved: false, rejectionReasons: risk.rejectionReasons },
-          note: "POST /orders routes through Stage 2 orderLifecycle directly (user-initiated, not bot) but MUST still pass riskEngine.checkOrder first — documented here",
+          note: "POST /orders routes through Stage 2 orderLifecycle directly (user-initiated, not bot) but MUST still pass riskEngine.checkOrder first - documented here",
         });
       }
 
@@ -164,7 +164,7 @@ export async function registerOrderRoutes(fastify: FastifyInstance): Promise<voi
     }
   });
 
-  // POST /orders/:id/cancel — Stage 2's cancel path
+  // POST /orders/:id/cancel - Stage 2's cancel path
   fastify.post("/orders/:id/cancel", async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as { marketId?: string; symbol?: string } | undefined;
@@ -185,7 +185,7 @@ export async function registerOrderRoutes(fastify: FastifyInstance): Promise<voi
         await ctx.exchange.close().catch(() => undefined);
         return reply.status(400).send({ error: "PRIVATE_KEY required for cancel", dataIntegrity: "DERIVED" as const });
       }
-      // Need market for cancel — resolve via body marketId/symbol or search all
+      // Need market for cancel - resolve via body marketId/symbol or search all
       let found: import("@somnia-chain/markets-sdk").UnifiedMarket | undefined;
       let onchain: import("@somnia-chain/markets-sdk").MarketOnchain | null = null;
       const identifier = body?.marketId ?? body?.symbol;

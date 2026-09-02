@@ -20,7 +20,7 @@ function resolverOf(statuses: Record<string, MarketSettlementStatus>): Settlemen
   };
 }
 
-describe("runSettlementPoll — SETTLEMENT realization from on-chain settlement state", () => {
+describe("runSettlementPoll - SETTLEMENT realization from on-chain settlement state", () => {
   it("YES position resolves YES → (1 - avgEntryPrice) * size, position CLOSED with source SETTLEMENT", async () => {
     const db = openSnapshotDb(":memory:");
     upsertBotPosition(db, { marketId: "0x1", symbol: "BTC-TEST/tUSDC", side: "YES", netPosition: 1, totalSize: 1, avgEntryPrice: 0.6, realizedPnL: 0 });

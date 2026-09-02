@@ -1,5 +1,5 @@
 /**
- * Pipeline — enforces Strategy → Risk Checks → Execution order.
+ * Pipeline - enforces Strategy → Risk Checks → Execution order.
  * Strategy must NOT call execution directly; only this pipeline may call placeRestingOrder
  * after riskEngine approves. Calling code cannot accidentally skip risk checks.
  *
@@ -33,9 +33,9 @@ export interface PipelineOverrides {
 }
 
 export interface PipelineResult {
-  /** StrategyDecision — DERIVED signal. */
+  /** StrategyDecision - DERIVED signal. */
   readonly decision: StrategyDecision;
-  /** RiskResult — DERIVED checks, null when strategy SKIPs (short-circuit, not called). */
+  /** RiskResult - DERIVED checks, null when strategy SKIPs (short-circuit, not called). */
   readonly risk: RiskResult | null;
   /** Whether execution was attempted and succeeded. */
   readonly executed: boolean;
@@ -61,12 +61,12 @@ export async function runPipeline(input: PipelineInput, overrides?: PipelineOver
   // 1) Strategy decides
   const decision: StrategyDecision = strategy.decide(analysis, strategyContext);
 
-  // 2) Short-circuit on SKIP — risk engine MUST NOT be called in this path
+  // 2) Short-circuit on SKIP - risk engine MUST NOT be called in this path
   if (decision.action === "SKIP") {
     return { decision, risk: null, executed: false, placeResult: null };
   }
 
-  // 3) Risk checks — context must carry analysis (LIVE_INDEXER/LIVE_ONCHAIN) plus config/positions/balances
+  // 3) Risk checks - context must carry analysis (LIVE_INDEXER/LIVE_ONCHAIN) plus config/positions/balances
   const riskContext: RiskCheckContext = {
     ...strategyContext,
     analysis,
@@ -78,7 +78,7 @@ export async function runPipeline(input: PipelineInput, overrides?: PipelineOver
     return { decision, risk, executed: false, placeResult: null };
   }
 
-  // 5) Only approved decisions reach execution — wire to Stage 2's orderLifecycle.
+  // 5) Only approved decisions reach execution - wire to Stage 2's orderLifecycle.
   // Map decision.side YES/NO to ec outcome, side always "buy" (buy that outcome at its mid).
   // Price/size from decision (DERIVED from config/analysis, not hardcoded).
   const outcome = decision.side as "YES" | "NO";
@@ -101,7 +101,7 @@ export async function runPipeline(input: PipelineInput, overrides?: PipelineOver
 }
 
 /**
- * Dry-run helper — same as runPipeline but without execution.
+ * Dry-run helper - same as runPipeline but without execution.
  * Useful for src/scripts/strategy-dry-run.ts to print what WOULD happen.
  */
 export function dryRunPipeline(params: {

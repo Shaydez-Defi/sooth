@@ -4,7 +4,7 @@ import { openSnapshotDb, insertSnapshot, countBotEvents } from "../snapshots/db.
 import { checkMidMove } from "./midMove.js";
 import { MID_MOVE_CONFIG } from "../config.js";
 
-describe("midMove observability — synthetic, not a trading signal", () => {
+describe("midMove observability - synthetic, not a trading signal", () => {
   let db: Database.Database;
 
   beforeEach(() => {

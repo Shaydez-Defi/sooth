@@ -29,7 +29,7 @@ describe("computeEstimatedProbability", () => {
 });
 
 describe("analyzeMarket", () => {
-  it("valid TRADE case — order-book imbalance tilt creates edge above minEdge", () => {
+  it("valid TRADE case - order-book imbalance tilt creates edge above minEdge", () => {
     // bidDepth 600 vs askDepth 300 → imbalance = 0.333, k=0.06 → tilt 0.02 → edge 0.02 meets MIN_EDGE
     // Use top 3 levels: bids 200+200+200=600, asks 100+100+100=300
     const res = analyzeMarket(baseInput);
@@ -42,7 +42,7 @@ describe("analyzeMarket", () => {
     expect(res.signalStrength).toBeCloseTo(0.333, 2);
   });
 
-  it("NO_TRADE — insufficient edge (balanced book, edge < minEdge)", () => {
+  it("NO_TRADE - insufficient edge (balanced book, edge < minEdge)", () => {
     const balanced = {
       ...baseInput,
       bids: [
@@ -63,7 +63,7 @@ describe("analyzeMarket", () => {
     expect(res.reasons.join(" ")).toContain("minEdge");
   });
 
-  it("NO_TRADE — insufficient liquidity", () => {
+  it("NO_TRADE - insufficient liquidity", () => {
     const thin = {
       ...baseInput,
       bids: [[0.55, 10] as const],
@@ -75,7 +75,7 @@ describe("analyzeMarket", () => {
     expect(res.liquidity).toBe(20);
   });
 
-  it("NO_TRADE — spread too wide", () => {
+  it("NO_TRADE - spread too wide", () => {
     const wide = {
       ...baseInput,
       bestBid: 0.4,
@@ -97,7 +97,7 @@ describe("analyzeMarket", () => {
     expect(res.reasons.join(" ")).toContain("spread");
   });
 
-  it("NO_TRADE — near expiry (below timeRemaining buffer)", () => {
+  it("NO_TRADE - near expiry (below timeRemaining buffer)", () => {
     const nearExpiry = { ...baseInput, timeRemaining: 10 };
     const res = analyzeMarket(nearExpiry);
     expect(res.recommendation).toBe("NO_TRADE");

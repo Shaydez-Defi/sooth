@@ -1,5 +1,5 @@
 /**
- * Bot Configuration persistence — extends Stage 5's BotConfig with market scope.
+ * Bot Configuration persistence - extends Stage 5's BotConfig with market scope.
  * Persisted to SQLite data/snapshots.db (bot_config table, id=1, zero external service)
  * so start/stop survives a process restart. This is the programmatic surface that
  * the later REST layer will call into.

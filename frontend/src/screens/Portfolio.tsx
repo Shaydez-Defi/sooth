@@ -116,15 +116,15 @@ export default function Portfolio() {
               <ProvenanceTag tag="LIVE_ONCHAIN" small />
             </div>
             {orders === null ? (
-              <div style={{ fontSize: 13, color: COLOR.faint }}>No signer — open orders unavailable without PRIVATE_KEY.</div>
+              <div style={{ fontSize: 13, color: COLOR.faint }}>No signer - open orders unavailable without PRIVATE_KEY.</div>
             ) : orders.length === 0 ? (
               <div style={{ fontSize: 13, color: COLOR.faint }}>No open orders.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {orders.map((m) => (
                   <div key={m.marketId} style={{ borderTop: `1px solid ${COLOR.border}`, paddingTop: 10 }}>
-                    <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>{m.symbol} — {m.marketId.slice(0, 10)}…</div>
-                    <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4 }}>{m.orders.length} order(s) — <ProvenanceTag tag={m.dataIntegrity} small /></div>
+                    <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>{m.symbol} - {m.marketId.slice(0, 10)}…</div>
+                    <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4 }}>{m.orders.length} order(s) - <ProvenanceTag tag={m.dataIntegrity} small /></div>
                   </div>
                 ))}
               </div>

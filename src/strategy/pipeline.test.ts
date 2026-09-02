@@ -78,7 +78,7 @@ const alwaysSkipStrategy: Strategy = {
   }),
 };
 
-describe("pipeline — Market Data → Strategy → Risk → Execution", () => {
+describe("pipeline - Market Data → Strategy → Risk → Execution", () => {
   it("strategy approves + risk approves → executes (calls placeOrder)", async () => {
     const execSpy = vi.fn(() => Promise.resolve({ txHash: "0xabc", blockNumber: 1n, status: "success", orderId: 1n, rested: true, filled: 0, gasUsed: 100n, price: 0.5, size: 1, symbol: "x", marketId: "0xabc", confirmedInOpenOrders: true } as unknown as import("../ec/orderLifecycle.js").PlaceResultTagged));
     const result = await runPipeline(

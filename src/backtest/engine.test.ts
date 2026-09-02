@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computePnL, runBacktest, type SettledMarket } from "./engine.js";
 
-describe("computePnL — payout formula (documented in engine.ts)", () => {
+describe("computePnL - payout formula (documented in engine.ts)", () => {
   it("YES buy at P=0.6, YES wins → (1-P)*S", () => {
     expect(computePnL({ direction: "YES", entryPrice: 0.6, size: 1, winningOutcome: 0, voided: false })).toBeCloseTo(0.4, 6);
   });
@@ -36,8 +36,8 @@ function synthMarket(overrides: Partial<SettledMarket> & { marketId: string }): 
   };
 }
 
-describe("runBacktest metrics — synthetic, clearly labeled, not claimed as live", () => {
-  it("known winning sequence — 3 trades, 2 wins, 1 loss", () => {
+describe("runBacktest metrics - synthetic, clearly labeled, not claimed as live", () => {
+  it("known winning sequence - 3 trades, 2 wins, 1 loss", () => {
     // All three use same book imbalance 0.333 → edge 0.02 → TRADE YES
     // WinningOutcome pattern: YES, YES, NO → P&L: +0.44, +0.44, -0.56 (entry 0.56 mid, k 0.06)
     const markets: SettledMarket[] = [

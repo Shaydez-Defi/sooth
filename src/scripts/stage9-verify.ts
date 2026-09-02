@@ -1,11 +1,11 @@
 /**
- * Stage 9 verification (brief §13 gap-close) — proven against REAL data, no fabrication.
+ * Stage 9 verification (brief §13 gap-close) - proven against REAL data, no fabrication.
  *
  * REAL sources used:
  *   - Real settled EC markets: listBinaryMarkets({status:"Finalized"}) + getMarketOnchain
  *     (LIVE_INDEXER + LIVE_ONCHAIN) for real winningOutcome/isResolved/isVoided.
  *   - Real snapshot mid history: data/snapshots.db (the continuous logger has run since Stage
- *     "logger" — real mids per market, polled ~45s) joined per fill for adverse selection.
+ *     "logger" - real mids per market, polled ~45s) joined per fill for adverse selection.
  *
  * SYNTHETIC parts (explicitly tagged, never presented as live trading):
  *   - The bot has 0 REAL fills (Stage 6/7 honest result; bot_fills/bot_positions are empty), so the
@@ -15,7 +15,7 @@
  *     The real bot DB (data/snapshots.db) is NEVER written to.
  *
  * Per STOP CONDITIONS: if the real bot DB genuinely has 0 fills, this script says so explicitly and
- * proves the logic via synthetic fills against real settled markets — no claim of live proof.
+ * proves the logic via synthetic fills against real settled markets - no claim of live proof.
  */
 
 import fs from "node:fs";
@@ -35,7 +35,7 @@ function clampProb(p: number): number {
 }
 
 async function main(): Promise<void> {
-  console.log("=== Stage 9 Verification — win rate / realized edge / adverse selection on REAL data ===\n");
+  console.log("=== Stage 9 Verification - win rate / realized edge / adverse selection on REAL data ===\n");
 
   if (!process.env.NETWORK) process.env.NETWORK = "testnet";
   if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) {
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   const positionsCount = (realDb.prepare("SELECT COUNT(*) c FROM bot_positions").get() as { c: number }).c;
   const snapshotsCount = (realDb.prepare("SELECT COUNT(*) c FROM snapshots").get() as { c: number }).c;
   console.log(`[CENSUS] real bot_fills=${fillsCount} bot_positions=${positionsCount} snapshots=${snapshotsCount} (data/snapshots.db)`);
-  console.log(`[STOP-CONDITION] with 0 real fills, realization logic is proven via SYNTHETIC positions against REAL settled markets + REAL snapshot mids — live proof does not exist (yet).\n`);
+  console.log(`[STOP-CONDITION] with 0 real fills, realization logic is proven via SYNTHETIC positions against REAL settled markets + REAL snapshot mids - live proof does not exist (yet).\n`);
 
   // ── 2. Copy REAL snapshot history into a TEMP db (never write the real bot tables) ───────────────
   const tmpPath = path.join(os.tmpdir(), `stage9-verify-${Date.now()}.db`);
@@ -65,12 +65,12 @@ async function main(): Promise<void> {
   tmpDb.prepare("DETACH DATABASE realdb").run();
   const distinctMarkets = (tmpDb.prepare("SELECT COUNT(DISTINCT marketId) c FROM snapshots").get() as { c: number }).c;
   console.log(
-    `[SNAPSHOTS] copied ${copiedRows.changes} REAL rows for ${distinctMarkets} distinct market(s) into temp db ${tmpPath} — real mid history for adverse selection (all markets, not just one)`,
+    `[SNAPSHOTS] copied ${copiedRows.changes} REAL rows for ${distinctMarkets} distinct market(s) into temp db ${tmpPath} - real mid history for adverse selection (all markets, not just one)`,
   );
 
   // ── 3. REAL settled markets from the indexer + on-chain, then SYNTHETIC positions ─────────────────
   const ctx = createExchange({ withSigner: false });
-  console.log(`\n[EC] exchange created — network=${ctx.config.network} venue=${String(ctx.config.venueId ?? "inferred")} indexer=${ctx.config.indexerUrl}\n`);
+  console.log(`\n[EC] exchange created - network=${ctx.config.network} venue=${String(ctx.config.venueId ?? "inferred")} indexer=${ctx.config.indexerUrl}\n`);
 
   const settledRows = await ctx.exchange.client.listBinaryMarkets({ venueId: ctx.config.venueId as `0x${string}`, status: "Finalized", limit: 50 });
   console.log(`[HISTORICAL] listBinaryMarkets Finalized → ${settledRows.length} real settled markets`);
@@ -107,7 +107,7 @@ async function main(): Promise<void> {
     console.log(`[SYNTHETIC] built ${syntheticPositions.length} OPEN positions (size ${SIZE_PER_POSITION}) against REAL settled markets; ${skippedNoOnchain} settled-market rows skipped (onchain not resolved/voided)`);
   for (const p of syntheticPositions) console.log(`  ${p.marketId.slice(0, 18)} ${p.symbol} side=${p.side} entry=${p.entryPrice.toFixed(4)} (${p.entryTag})`);
 
-  // EARLY_CLOSE must close an OPEN (still-live) market — seed 2 from non-Finalized EC markets so §5
+  // EARLY_CLOSE must close an OPEN (still-live) market - seed 2 from non-Finalized EC markets so §5
   // has an unresolved position to close. These stay OPEN through §4 (resolver reports unresolved).
   const openForEC: Array<{ marketId: string; symbol: string; side: PositionSide; entryPrice: number }> = [];
   try {
@@ -134,9 +134,9 @@ async function main(): Promise<void> {
       ecSeeded += 1;
     }
     console.log(`[SYNTHETIC] seeded ${openForEC.length} OPEN positions on live (unresolved) markets for EARLY_CLOSE demonstration`);
-    for (const p of openForEC) console.log(`  ${p.marketId.slice(0, 18)} ${p.symbol} side=${p.side} entry=${p.entryPrice.toFixed(4)} (ESTIMATED 0.5 — live market, no settled lastPrice)`);
+    for (const p of openForEC) console.log(`  ${p.marketId.slice(0, 18)} ${p.symbol} side=${p.side} entry=${p.entryPrice.toFixed(4)} (ESTIMATED 0.5 - live market, no settled lastPrice)`);
   } catch (err) {
-    console.log(`[WARN] could not seed EARLY_CLOSE live market: ${(err as Error).message} — EARLY_CLOSE demo skipped`);
+    console.log(`[WARN] could not seed EARLY_CLOSE live market: ${(err as Error).message} - EARLY_CLOSE demo skipped`);
   }
 
   // ── 4. RUN the settlement poll against the REAL on-chain/INDEXER state ───────────────────────────
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
     console.log(`  [REALIZED] ${r.symbol.slice(0, 30)} ${r.side} size=${r.size} avg=${r.avgEntryPrice.toFixed(4)} outcome=${outcomeOf(r)} pnl=${r.realizedPnLDelta >= 0 ? "+" : ""}${r.realizedPnLDelta.toFixed(4)}`);
   }
   for (const e of pollResult.errors) console.log(`  [ERROR] ${e}`);
-  for (const s of pollResult.stillOpen) console.log(`  [STILL_OPEN] ${s.marketId.slice(0, 18)} — ${s.reason}`);
+  for (const s of pollResult.stillOpen) console.log(`  [STILL_OPEN] ${s.marketId.slice(0, 18)} - ${s.reason}`);
 
   // ── 5. Demonstrate EARLY_CLOSE with a synthetic exit fill (fill → basis → realized P&L) ──────────
   let earlyCloseSaved: { marketId: string; symbol: string; status: string; realizationSource: string | null; realizedPnL: number } | null = null;
@@ -165,9 +165,9 @@ async function main(): Promise<void> {
     // Ensure a real snapshot exists at fill+300 for this marketId (adverse selection needs it)
     if (anchorSnap) {
       // The anchorSnap itself is at fill+300, so it already satisfies the 5m lookahead within ±120s
-      // No extra insert needed — we copied all real snapshots, so this anchor is in tmpDb.
+      // No extra insert needed - we copied all real snapshots, so this anchor is in tmpDb.
     } else {
-      // No real snapshot for this marketId — insert a synthetic one at fill+300 so adverse selection is computable
+      // No real snapshot for this marketId - insert a synthetic one at fill+300 so adverse selection is computable
       const { insertSnapshot } = await import("../snapshots/db.js");
       insertSnapshot(tmpDb, {
         marketId: ec.marketId,
@@ -198,7 +198,7 @@ async function main(): Promise<void> {
       midAtDecision: syntheticMid,
       rawData: { simulated: true, tag: "SYNTHETIC early-close verification" },
     });
-    // insertBotFill only persists the row — realization happens here via the SAME engine the bot
+    // insertBotFill only persists the row - realization happens here via the SAME engine the bot
     // uses (positions.ts applyFillToPosition → EARLY_CLOSE path). This is what proves the close logic
     // against an OPEN position (the settlement poll left it open because the market is still live).
     const fillResult = applyFillToPosition(tmpDb, {
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
     );
   }
 
-  // ── 6. Edge analytics over the temp db — winRate/realizedEdge/adverseSelection ─────────────────────
+  // ── 6. Edge analytics over the temp db - winRate/realizedEdge/adverseSelection ─────────────────────
   const analytics = computeEdgeAnalytics(tmpDb);
   const m = analytics.metrics;
   console.log(`\n[EDGE_ANALYTICS] status=${analytics.status} fills=${analytics.fillsCount} positions=${analytics.positionsCount}`);
@@ -276,7 +276,7 @@ async function main(): Promise<void> {
   };
   console.log("\n[VERIFICATION_JSON] " + JSON.stringify(summary, null, 2));
 
-  // ── 8. Teardown — temp db removed, real db untouched, exchange closed ─────────────────────────────
+  // ── 8. Teardown - temp db removed, real db untouched, exchange closed ─────────────────────────────
   tmpDb.close();
   realDb.close();
   try {
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
     console.error(`[WARN] temp db cleanup: ${(err as Error).message}`);
   }
   await Promise.race([ctx.exchange.close().catch(() => undefined), new Promise<void>((r) => setTimeout(r, 3000))]);
-  console.log("\n[OK] verification complete — real bot DB untouched.");
+  console.log("\n[OK] verification complete - real bot DB untouched.");
 }
 
 main().catch((err: unknown) => {

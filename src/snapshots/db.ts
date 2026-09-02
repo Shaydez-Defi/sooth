@@ -1,5 +1,5 @@
 /**
- * Snapshot storage — SQLite at data/snapshots.db (better-sqlite3, zero external service).
+ * Snapshot storage - SQLite at data/snapshots.db (better-sqlite3, zero external service).
  * Schema matches Stage 4 logger brief: id, marketId, symbol, capturedAtUnix, capturedAtIso,
  * bidLevels JSON, askLevels JSON, mid, bidDepth, askDepth, imbalance, blockNumber.
  *
@@ -140,7 +140,7 @@ export function initDb(db: Database.Database): void {
     try {
       db.exec(`ALTER TABLE bot_fills ADD COLUMN ${col}`);
     } catch {
-      // column already exists — ignore
+      // column already exists - ignore
     }
   }
   // Migration for existing bot_fills without stage-9 side/outcome/realizedPnL columns
@@ -148,7 +148,7 @@ export function initDb(db: Database.Database): void {
     try {
       db.exec(`ALTER TABLE bot_fills ADD COLUMN ${col}`);
     } catch {
-      // column already exists — ignore
+      // column already exists - ignore
     }
   }
   // Migration for existing bot_positions without stage-9 cost-basis/realization columns
@@ -163,7 +163,7 @@ export function initDb(db: Database.Database): void {
     try {
       db.exec(`ALTER TABLE bot_positions ADD COLUMN ${col}`);
     } catch {
-      // column already exists — ignore
+      // column already exists - ignore
     }
   }
 }
@@ -190,7 +190,7 @@ export function insertSnapshot(db: Database.Database, params: InsertSnapshotPara
   return Number(info.lastInsertRowid);
 }
 
-/** Count total rows — for verification and liveness checks. */
+/** Count total rows - for verification and liveness checks. */
 export function countSnapshots(db: Database.Database): number {
   const row = db.prepare("SELECT COUNT(*) as c FROM snapshots").get() as { c: number };
   return row.c;
@@ -250,7 +250,7 @@ export function countBotEvents(db: Database.Database): number {
   return row.c;
 }
 
-/** Side of a fill on the book: buy (opens/adds an outcome position) or sell (exits — EARLY_CLOSE). */
+/** Side of a fill on the book: buy (opens/adds an outcome position) or sell (exits - EARLY_CLOSE). */
 export type FillSide = "buy" | "sell";
 /** The outcome token a position/fill trades: YES (outcome 0) or NO (outcome 1). */
 export type PositionSide = "YES" | "NO";
@@ -446,7 +446,7 @@ export function getLatestSnapshotMid(db: Database.Database, marketId: string): {
 
 /**
  * Closest real snapshot mid to `targetUnix` for a market (adverse selection per fill).
- * Returns null when no snapshot is within `maxDeviationSeconds` — callers then report the fill's
+ * Returns null when no snapshot is within `maxDeviationSeconds` - callers then report the fill's
  * adverse selection as NOT COMPUTABLE (never interpolate or approximate silently).
  * Tag: LIVE_INDEXER mid (HISTORICAL snapshot), DERIVED deviation.
  */

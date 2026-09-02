@@ -1,5 +1,5 @@
 /**
- * Position / cost-basis engine — Stage 9 (brief §13 gap-close).
+ * Position / cost-basis engine - Stage 9 (brief §13 gap-close).
  *
  * Tracks a quantity-weighted average entry price per marketId+outcome from bot_fills, and realizes
  * P&L through exactly two documented paths:
@@ -10,7 +10,7 @@
  *   - EARLY_CLOSE: the position was partially/fully exited by an opposite-side fill before
  *     settlement; that fill's price IS the realization → P&L = (exitPrice - avgEntryPrice) * exitedSize.
  *
- * This module does NOT compute realized P&L at fill time for buys — buys only build the cost basis
+ * This module does NOT compute realized P&L at fill time for buys - buys only build the cost basis
  * that Step 2 (settlement / early-close) needs.
  *
  * No silent catches: every invalid fill returns { kind: "error", reason }. Positions are modelled as
@@ -30,7 +30,7 @@ export interface ApplyFillInput {
   readonly outcome: PositionSide;
   readonly quantityFilled: number;
   readonly fillPrice: number;
-  /** bot_fills row id — when provided, closing fills tag their own realizedPnl on the row. */
+  /** bot_fills row id - when provided, closing fills tag their own realizedPnl on the row. */
   readonly fillId?: number | null;
 }
 
@@ -53,7 +53,7 @@ export function weightedEntryPrice(currentAvg: number | null | undefined, curren
 }
 
 /**
- * Whether the held outcome wins given the on-chain winningOutcome. null when unresolved/ambiguous —
+ * Whether the held outcome wins given the on-chain winningOutcome. null when unresolved/ambiguous -
  * callers must NOT guess an outcome from null.
  */
 export function settlementWon(side: PositionSide, winningOutcome: number | null | undefined): boolean | null {
@@ -64,7 +64,7 @@ export function settlementWon(side: PositionSide, winningOutcome: number | null 
 
 /**
  * Stage 4's exact payout formula applied to an open position's remaining shares.
- * Returns null when the outcome is unresolved/ambiguous or the basis is invalid — no guessing.
+ * Returns null when the outcome is unresolved/ambiguous or the basis is invalid - no guessing.
  */
 export function computeSettlementPnL(args: {
   readonly side: PositionSide;
@@ -96,10 +96,10 @@ function tagFillRealizedPnl(db: Database.Database, fillId: number | null | undef
 export function applyFillToPosition(db: Database.Database, input: ApplyFillInput): ApplyFillResult {
   const { marketId, symbol, side, outcome, quantityFilled, fillPrice, fillId } = input;
   if (!Number.isFinite(quantityFilled) || quantityFilled <= 0) {
-    return { kind: "error", reason: `fill qty ${String(quantityFilled)} is not a positive number — cannot build cost basis` };
+    return { kind: "error", reason: `fill qty ${String(quantityFilled)} is not a positive number - cannot build cost basis` };
   }
   if (!Number.isFinite(fillPrice) || !(fillPrice > 0 && fillPrice < 1)) {
-    return { kind: "error", reason: `fill price ${String(fillPrice)} outside (0,1) probability — cannot build cost basis` };
+    return { kind: "error", reason: `fill price ${String(fillPrice)} outside (0,1) probability - cannot build cost basis` };
   }
 
   const existing = getBotPosition(db, marketId);
@@ -112,10 +112,10 @@ export function applyFillToPosition(db: Database.Database, input: ApplyFillInput
       return { kind: "error", reason: `sell ${outcome} for ${marketId} but no open position exists to exit` };
     }
     if (existing.side !== outcome) {
-      return { kind: "error", reason: `sell ${outcome} but open position holds ${existing.side} — sell the held side to exit` };
+      return { kind: "error", reason: `sell ${outcome} but open position holds ${existing.side} - sell the held side to exit` };
     }
     if (existing.avgEntryPrice === null) {
-      return { kind: "error", reason: `position ${marketId} has size ${priorSize} but no avgEntryPrice — cannot compute exit P&L (data integrity), refused` };
+      return { kind: "error", reason: `position ${marketId} has size ${priorSize} but no avgEntryPrice - cannot compute exit P&L (data integrity), refused` };
     }
     if (quantityFilled > priorSize) {
       // Over-exit: only the held shares exist; realize those fully, never go negative size.
@@ -179,7 +179,7 @@ export function applyFillToPosition(db: Database.Database, input: ApplyFillInput
   // at that implied price, then open the new outcome in the same row (positions stay keyed by
   // marketId). This is a documented rule, not a silent approximation.
   if (existing.avgEntryPrice === null) {
-    return { kind: "error", reason: `position ${marketId} has size ${priorSize} but no avgEntryPrice — cannot compute implied exit (data integrity), refused` };
+    return { kind: "error", reason: `position ${marketId} has size ${priorSize} but no avgEntryPrice - cannot compute implied exit (data integrity), refused` };
   }
   const impliedExit = 1 - fillPrice;
   const realizedDelta = (impliedExit - existing.avgEntryPrice) * priorSize;

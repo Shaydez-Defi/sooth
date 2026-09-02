@@ -2,7 +2,12 @@
 import type { FastifyInstance } from "fastify";
 import { createExchange, activeMarkets, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
 import { analyzeMarket } from "../../analysis/engine.js";
-import { ANALYSIS_CONFIG } from "../../config.js";
+import { ANALYSIS_CONFIG, SNAPSHOT_CONFIG } from "../../config.js";
+import { openSnapshotDb } from "../../snapshots/db.js";
+
+const HISTORY_DEFAULT_LIMIT = 100;
+const HISTORY_MAX_LIMIT = 500;
+const HISTORY_MIN_LIMIT = 1;
 
 /** Recursively convert BigInt values to strings so Fastify can serialize the payload. */
 function jsonSafe(value: unknown): unknown {
@@ -152,6 +157,57 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
       return reply.send({ data: analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } as const });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets/:id/analysis failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });
+    }
+  });
+
+  // GET /markets/:id/history — real rows from snapshots.db, HISTORICAL, ?limit=
+  fastify.get("/markets/:id/history", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const query = request.query as { limit?: string };
+    if (!id || id.trim() === "") {
+      return reply.status(400).send({ error: "market id required", dataIntegrity: "DERIVED" as const });
+    }
+    const rawLimit = query.limit !== undefined ? Number(query.limit) : HISTORY_DEFAULT_LIMIT;
+    if (!Number.isInteger(rawLimit) || rawLimit < HISTORY_MIN_LIMIT || rawLimit > HISTORY_MAX_LIMIT) {
+      return reply.status(400).send({ error: `limit must be integer in [${HISTORY_MIN_LIMIT},${HISTORY_MAX_LIMIT}]`, dataIntegrity: "DERIVED" as const });
+    }
+    const limit = rawLimit;
+    const marketId = id.trim();
+    let db: ReturnType<typeof openSnapshotDb> | null = null;
+    try {
+      db = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
+      const rows = db
+        .prepare(
+          `SELECT capturedAtIso, mid, imbalance, blockNumber, capturedAtUnix FROM snapshots WHERE marketId = ? ORDER BY capturedAtUnix DESC LIMIT ?`,
+        )
+        .all(marketId, limit) as Array<{ capturedAtIso: string; mid: number | null; imbalance: number; blockNumber: number | null; capturedAtUnix: number }>;
+      // Return most recent `limit` ordered chronologically for chart (oldest → newest)
+      const ordered = [...rows].reverse();
+      const data = ordered.map((r) => ({
+        capturedAtIso: r.capturedAtIso,
+        mid: r.mid,
+        imbalance: r.imbalance,
+        blockNumber: r.blockNumber,
+        dataIntegrity: "HISTORICAL" as const,
+      }));
+      const hasHistory = data.length > 0;
+      return reply.send({
+        data,
+        count: data.length,
+        hasHistory,
+        marketId,
+        limit,
+        dataIntegrity: "HISTORICAL" as const,
+        ...(hasHistory ? {} : { note: "no history yet — logger hasn't captured this market" }),
+      });
+    } catch (err) {
+      return reply.status(500).send({ error: `GET /markets/:id/history failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });
+    } finally {
+      try {
+        db?.close();
+      } catch {
+        // ignore close errors
+      }
     }
   });
 }

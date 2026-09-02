@@ -358,6 +358,28 @@ export function getBotEvents(id = "default", params: { limit?: number; offset?: 
   return apiFetch<BotEventsResponse>(`/bots/${encodeURIComponent(id)}/events${suffix}`);
 }
 
+export interface MarketHistoryPoint {
+  readonly capturedAtIso: string;
+  readonly mid: number | null;
+  readonly imbalance: number;
+  readonly blockNumber: number | null;
+  readonly dataIntegrity: DataIntegrityTag;
+}
+export interface MarketHistoryResponse {
+  data: MarketHistoryPoint[];
+  count: number;
+  hasHistory: boolean;
+  marketId: string;
+  limit: number;
+  dataIntegrity: DataIntegrityTag;
+  note?: string;
+}
+const MARKET_HISTORY_DEFAULT_LIMIT = 100;
+export function getMarketHistory(id: string, limit: number = MARKET_HISTORY_DEFAULT_LIMIT): Promise<MarketHistoryResponse> {
+  const qs = limit !== MARKET_HISTORY_DEFAULT_LIMIT ? `?limit=${limit}` : "";
+  return apiFetch<MarketHistoryResponse>(`/markets/${encodeURIComponent(id)}/history${qs}`);
+}
+
 export interface HealthResponse {
   status: string;
   dataIntegrity: DataIntegrityTag;

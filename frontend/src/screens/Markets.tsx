@@ -19,6 +19,12 @@ const COLOR = {
 } as const;
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
+// No magic numbers — thresholds from src/config.ts ANALYSIS_CONFIG
+const MIN_LIQUIDITY = 100;
+const MAX_SPREAD = 0.06;
+const MIN_EDGE = 0.02;
+const SECONDS_PER_HOUR = 3600;
+
 // Type for enriched row derived from live MarketAnalysis — visual shape identical to original
 type EnrichedRow = {
   id: string;
@@ -29,6 +35,8 @@ type EnrichedRow = {
   liquidity: number;
   spread: number;
   expiresInHrs: number;
+  timeRemaining: number;
+  isExpired: boolean;
   recommendation: "TRADE" | "NO_TRADE";
   tier: "TRADE" | "WAIT" | "NO";
   illiquid: boolean;
@@ -36,14 +44,16 @@ type EnrichedRow = {
 };
 
 function computeTier(a: MarketAnalysis): { tier: EnrichedRow["tier"]; illiquid: boolean } {
-  const illiquid = a.liquidity < 100 || a.spread > 0.06;
+  const illiquid = a.liquidity < MIN_LIQUIDITY || a.spread > MAX_SPREAD;
   if (illiquid) return { tier: "NO", illiquid: true };
   if (a.recommendation === "TRADE") return { tier: "TRADE", illiquid: false };
-  if (Math.abs(a.edge) >= 0.02) return { tier: "WAIT", illiquid: false };
+  if (Math.abs(a.edge) >= MIN_EDGE) return { tier: "WAIT", illiquid: false };
   return { tier: "NO", illiquid: false };
 }
 
-const TIER_COLOR = { TRADE: COLOR.up, WAIT: COLOR.accent, NO: COLOR.faint } as const;
+// Visual hierarchy: TRADE = strong accent, WAIT = neutral/muted, NO = quiet/receded, expired = fully dimmed
+const TIER_COLOR = { TRADE: COLOR.accent, WAIT: COLOR.muted, NO: COLOR.faint } as const;
+const TIER_BG: Record<EnrichedRow["tier"], string> = { TRADE: COLOR.accent, WAIT: "transparent", NO: "transparent" };
 
 function ProvenanceNote() {
   const [open, setOpen] = useState(false);
@@ -92,15 +102,24 @@ function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
-function SignalPill({ tier }: { tier: EnrichedRow["tier"] }) {
+function SignalPill({ tier, isExpired }: { tier: EnrichedRow["tier"]; isExpired?: boolean }) {
+  if (isExpired) {
+    return (
+      <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 600, letterSpacing: "0.03em", color: COLOR.faint, background: "transparent", border: `1px solid ${COLOR.border}`, borderRadius: 4, padding: "2px 8px", opacity: 0.6 }}>
+        {tier}
+      </span>
+    );
+  }
+  const isTrade = tier === "TRADE";
   return (
     <span
       style={{
-        fontFamily: "monospace", fontSize: 11, fontWeight: 700, letterSpacing: "0.03em",
-        color: tier === "TRADE" ? COLOR.ink : TIER_COLOR[tier],
-        background: tier === "TRADE" ? COLOR.up : "transparent",
-        border: tier === "TRADE" ? "none" : `1px solid ${COLOR.border}`,
+        fontFamily: "monospace", fontSize: 11, fontWeight: isTrade ? 800 : 600, letterSpacing: "0.03em",
+        color: isTrade ? COLOR.ink : TIER_COLOR[tier],
+        background: TIER_BG[tier],
+        border: isTrade ? "none" : `1px solid ${tier === "WAIT" ? COLOR.muted + "55" : COLOR.border}`,
         borderRadius: 4, padding: "2px 8px",
+        opacity: tier === "NO" ? 0.75 : 1,
       }}
     >
       {tier}
@@ -202,7 +221,7 @@ export default function SoothMarkets() {
         const a = d.analysis;
         const { tier, illiquid } = computeTier(a);
         // expiresInHrs derived from timeRemaining seconds → hours, matching original expiresInHrs shape
-        const expiresInHrs = Math.max(0, Math.round(a.timeRemaining / 3600));
+        const expiresInHrs = Math.max(0, Math.round(a.timeRemaining / SECONDS_PER_HOUR));
         return {
           id: a.marketId,
           label: a.symbol,
@@ -212,6 +231,8 @@ export default function SoothMarkets() {
           liquidity: a.liquidity,
           spread: a.spread,
           expiresInHrs,
+          timeRemaining: a.timeRemaining,
+          isExpired: a.timeRemaining <= 0,
           recommendation: a.recommendation,
           tier,
           illiquid,
@@ -287,6 +308,7 @@ export default function SoothMarkets() {
         .sooth-search:focus { border-color: ${COLOR.accent} !important; }
         @keyframes sooth-live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .sooth-live-dot { animation: sooth-live-pulse 2s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .sooth-live-dot { animation: none !important; } }
         @media (max-width: 900px) { .sooth-markets-grid { grid-template-columns: 1fr !important; } }
         @media (max-width: 800px) {
           .sooth-table-head { display: none !important; }
@@ -348,27 +370,49 @@ export default function SoothMarkets() {
                 <span />
               </div>
               {!loading && sorted.length === 0 && <div style={{ padding: "40px 16px", textAlign: "center", color: COLOR.faint, fontSize: 14 }}>No markets match your filters.</div>}
-              {sorted.map((m, i) => (
-                <div
-                  key={m.id}
-                  className="sooth-row"
-                  onMouseEnter={() => setHoveredRow(m.id)}
-                  onMouseLeave={() => setHoveredRow(null)}
-                  onClick={() => {
-                    setSelectedRow(m.id);
-                    navigate(`/markets/${encodeURIComponent(m.id)}`);
-                  }}
-                  style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 0.9fr 0.9fr 0.8fr 0.8fr 24px", alignItems: "center", padding: "14px 16px", borderBottom: i < sorted.length - 1 ? `1px solid ${COLOR.border}` : "none", background: hoveredRow === m.id ? COLOR.surface2 : selectedRow === m.id ? "rgba(204,136,153,0.06)" : "transparent" }}
-                >
-                  <span className="sooth-cell-label" style={{ fontSize: 14, paddingRight: 12 }}>{m.label}</span>
-                  <span className="sooth-cell" data-label="Price" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: COLOR.muted }}>{pct(m.marketProb)}</span>
-                  <span className="sooth-cell" data-label="Sooth Est." style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: COLOR.accent }}>{pct(m.soothEst)}</span>
-                  <span className="sooth-cell" data-label="Edge" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.tier === "NO" ? COLOR.faint : COLOR.up }}>{m.edge >= 0 ? "+" : ""}{(m.edge * 100).toFixed(1)}%</span>
-                  <span className="sooth-cell" data-label="Expires" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: COLOR.muted }}>{formatHrs(m.expiresInHrs)}</span>
-                  <span className="sooth-cell" data-label="Signal" style={{ textAlign: "right" }}><SignalPill tier={m.tier} /></span>
-                  <ChevronRight size={16} color={hoveredRow === m.id ? COLOR.text : COLOR.faint} style={{ justifySelf: "end" }} />
-                </div>
-              ))}
+              {sorted.map((m, i) => {
+                const isPositive = m.edge > 0.0001;
+                const isNegative = m.edge < -0.0001;
+                const soothEstColor = m.isExpired ? COLOR.faint : isPositive ? COLOR.accent : isNegative ? COLOR.down : COLOR.muted;
+                const edgeColor = m.isExpired ? COLOR.faint : isPositive ? COLOR.up : isNegative ? COLOR.down : COLOR.faint;
+                const rowOpacity = m.isExpired ? 0.55 : 1;
+                return (
+                  <div
+                    key={m.id}
+                    className="sooth-row"
+                    onMouseEnter={() => setHoveredRow(m.id)}
+                    onMouseLeave={() => setHoveredRow(null)}
+                    onClick={() => {
+                      setSelectedRow(m.id);
+                      navigate(`/markets/${encodeURIComponent(m.id)}`);
+                    }}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "2fr 0.8fr 0.9fr 0.9fr 0.8fr 0.8fr 24px",
+                      alignItems: "center",
+                      padding: "14px 16px",
+                      borderBottom: i < sorted.length - 1 ? `1px solid ${COLOR.border}` : "none",
+                      background: hoveredRow === m.id && !m.isExpired ? COLOR.surface2 : selectedRow === m.id && !m.isExpired ? "rgba(204,136,153,0.06)" : m.isExpired ? "rgba(20,19,15,0.25)" : "transparent",
+                      opacity: rowOpacity,
+                    }}
+                  >
+                    <span className="sooth-cell-label" style={{ fontSize: 14, paddingRight: 12, display: "inline-flex", alignItems: "center", gap: 8, color: m.isExpired ? COLOR.faint : COLOR.text }}>
+                      {!m.isExpired && <span className="sooth-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLOR.up, display: "inline-block", flexShrink: 0 }} aria-hidden="true" />}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</span>
+                    </span>
+                    <span className="sooth-cell" data-label="Price" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.isExpired ? COLOR.faint : COLOR.muted }}>{pct(m.marketProb)}</span>
+                    <span className="sooth-cell" data-label="Sooth Est." style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: soothEstColor }}>{pct(m.soothEst)}</span>
+                    <span className="sooth-cell" data-label="Edge" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: edgeColor, display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
+                      {isPositive ? <ChevronUp size={10} style={{ flexShrink: 0 }} /> : isNegative ? <ChevronDown size={10} style={{ flexShrink: 0 }} /> : null}
+                      {m.edge >= 0 ? "+" : ""}
+                      {(m.edge * 100).toFixed(1)}%
+                    </span>
+                    <span className="sooth-cell" data-label="Expires" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.isExpired ? COLOR.faint : COLOR.muted }}>{formatHrs(m.expiresInHrs)}</span>
+                    <span className="sooth-cell" data-label="Signal" style={{ textAlign: "right" }}><SignalPill tier={m.tier} isExpired={m.isExpired} /></span>
+                    <ChevronRight size={16} color={m.isExpired ? COLOR.faint : hoveredRow === m.id ? COLOR.text : COLOR.faint} style={{ justifySelf: "end", opacity: m.isExpired ? 0.5 : 1 }} />
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div>

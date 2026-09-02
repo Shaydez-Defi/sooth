@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
-import { ChevronDown, CheckCircle2, XCircle, Waypoints, ShieldHalf, ArrowLeftRight, FlagTriangleRight, Compass } from "lucide-react";
-import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, type MarketAnalysis } from "../lib/api";
+import { ChevronDown, CheckCircle2, XCircle, Waypoints, ShieldHalf, ArrowLeftRight, FlagTriangleRight, Compass, Activity } from "lucide-react";
+import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, type MarketAnalysis } from "../lib/api";
 
 // Preserved verbatim from sooth-market-detail-v3.jsx — inline, not unified
 const COLOR = {
@@ -27,6 +27,9 @@ const PANEL_LABEL: React.CSSProperties = {
   letterSpacing: "0.05em",
   color: COLOR.faint,
 };
+const MIN_LIQUIDITY = 100;
+const MIN_ORDER_SIZE = 1;
+const MARKET_HISTORY_LIMIT = 100;
 function PanelHeader({ icon: Icon, children, right }: { icon?: React.ComponentType<{ size: number; color: string }>; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: SPACE.header }}>
@@ -55,7 +58,7 @@ function TopBar({ analysis, marketId }: { analysis: MarketAnalysis | null; marke
   const [open, setOpen] = useState(false);
   const edge = analysis ? analysis.estimatedProbability - analysis.marketProbability : 0;
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "14px 20px", borderBottom: `1px solid ${COLOR.border}` }}>
+    <div className="sooth-glass-card" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
       <button className="sooth-focusable" onClick={() => setOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 14px", color: COLOR.text, fontFamily: "monospace", fontSize: 13, cursor: "pointer" }}>
         {marketId}
         <ChevronDown size={14} color={COLOR.faint} style={{ transform: open ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}` }} />
@@ -85,7 +88,7 @@ function TopBar({ analysis, marketId }: { analysis: MarketAnalysis | null; marke
 
 function ReasoningTrace({ analysis }: { analysis: MarketAnalysis }) {
   return (
-    <div style={{ padding: `${SPACE.block}px 20px`, borderBottom: `1px solid ${COLOR.border}`, background: "rgba(20, 19, 15, 0.5)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}>
+    <div className="sooth-glass-card">
       <PanelHeader icon={Compass}>Reasoning trace — why {analysis.recommendation}</PanelHeader>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "6px 24px" }}>
         {analysis.reasons.map((r, i) => (
@@ -101,31 +104,55 @@ function ReasoningTrace({ analysis }: { analysis: MarketAnalysis }) {
 
 function DepthChart({ bids, asks }: { bids: [number, number][]; asks: [number, number][] }) {
   const maxDepth = Math.max(...bids.map((b) => b[1]), ...asks.map((a) => a[1]), 1);
+  const emptyBoxStyle: React.CSSProperties = {
+    border: `1px dashed ${COLOR.border}`,
+    borderRadius: 6,
+    padding: "24px 12px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    background: COLOR.surface2,
+    minHeight: 80,
+  };
   return (
     <div className="sooth-glass-card">
       <PanelHeader>Order book depth</PanelHeader>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div>
           <div style={{ fontSize: 11, color: COLOR.up, marginBottom: 6, fontFamily: "monospace" }}>BIDS</div>
-          {bids.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No bids</div>}
-          {bids.map((b) => (
-            <div key={b[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
-              <div style={{ position: "absolute", inset: 0, background: COLOR.up, opacity: 0.1, width: `${(b[1] / maxDepth) * 100}%`, right: "auto" }} />
-              <span style={{ position: "relative", color: COLOR.up }}>{pct(b[0])}</span>
-              <span style={{ position: "relative", color: COLOR.muted }}>{b[1].toLocaleString()}</span>
+          {bids.length === 0 ? (
+            <div style={emptyBoxStyle}>
+              <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>No bids</span>
+              <span style={{ fontSize: 11, color: COLOR.faint }}>Waiting for live book</span>
             </div>
-          ))}
+          ) : (
+            bids.map((b) => (
+              <div key={b[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
+                <div style={{ position: "absolute", inset: 0, background: COLOR.up, opacity: 0.1, width: `${(b[1] / maxDepth) * 100}%`, right: "auto" }} />
+                <span style={{ position: "relative", color: COLOR.up }}>{pct(b[0])}</span>
+                <span style={{ position: "relative", color: COLOR.muted }}>{b[1].toLocaleString()}</span>
+              </div>
+            ))
+          )}
         </div>
         <div>
           <div style={{ fontSize: 11, color: COLOR.down, marginBottom: 6, fontFamily: "monospace", textAlign: "right" }}>ASKS</div>
-          {asks.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint, textAlign: "right" }}>No asks</div>}
-          {asks.map((a) => (
-            <div key={a[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
-              <div style={{ position: "absolute", inset: 0, background: COLOR.down, opacity: 0.1, left: "auto", width: `${(a[1] / maxDepth) * 100}%` }} />
-              <span style={{ position: "relative", color: COLOR.muted }}>{a[1].toLocaleString()}</span>
-              <span style={{ position: "relative", color: COLOR.down }}>{pct(a[0])}</span>
+          {asks.length === 0 ? (
+            <div style={emptyBoxStyle}>
+              <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>No asks</span>
+              <span style={{ fontSize: 11, color: COLOR.faint }}>Waiting for live book</span>
             </div>
-          ))}
+          ) : (
+            asks.map((a) => (
+              <div key={a[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
+                <div style={{ position: "absolute", inset: 0, background: COLOR.down, opacity: 0.1, left: "auto", width: `${(a[1] / maxDepth) * 100}%` }} />
+                <span style={{ position: "relative", color: COLOR.muted }}>{a[1].toLocaleString()}</span>
+                <span style={{ position: "relative", color: COLOR.down }}>{pct(a[0])}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -145,8 +172,8 @@ function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: s
 
   const riskCheck = useMemo(() => {
     if (amountNum === 0) return null;
-    if (amountNum < 1) return { ok: false, reason: `Below minimum order size (1)` };
-    if (liquidity < 100) return { ok: false, reason: "Market liquidity below 100 minimum" };
+    if (amountNum < MIN_ORDER_SIZE) return { ok: false, reason: `Below minimum order size (${MIN_ORDER_SIZE})` };
+    if (liquidity < MIN_LIQUIDITY) return { ok: false, reason: `Market liquidity below ${MIN_LIQUIDITY} minimum` };
     return { ok: true, reason: "Within liquidity, spread, and balance limits" };
   }, [amountNum, liquidity]);
 
@@ -296,33 +323,108 @@ function BottomTabs({ marketId }: { marketId: string }) {
   );
 }
 
-function ProbabilityChart({ analysis }: { analysis: MarketAnalysis | null }) {
-  // Original markup preserved: single-point live mid placeholder, honest sparse state (no fake history)
-  const data = analysis ? [{ time: new Date().toISOString(), p: analysis.marketProbability }] : [];
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  if (!active || !payload || payload.length === 0 || label === undefined) return null;
   return (
-    <div className="sooth-glass-card" style={{ marginTop: SPACE.panel }}>
-      <PanelHeader right={analysis ? <span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{pct(analysis.marketProbability)} <span style={{ color: COLOR.faint, fontSize: 11 }}>now</span></span> : undefined}>
-        Market probability — live mid
+    <div style={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 6, padding: "6px 10px" }}>
+      <div style={{ ...PANEL_LABEL, fontSize: 10, marginBottom: 2 }}>{formatClock(label)}</div>
+      <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: COLOR.accent }}>{pct(payload[0].value)}</div>
+    </div>
+  );
+}
+
+function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: MarketAnalysis | null }) {
+  const [history, setHistory] = useState<Array<{ capturedAtIso: string; mid: number | null }>>([]);
+  const [hasHistory, setHasHistory] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!marketId) return;
+    setLoading(true);
+    setError(null);
+    void getMarketHistory(marketId, MARKET_HISTORY_LIMIT)
+      .then((res) => {
+        setHistory(res.data);
+        setHasHistory(res.hasHistory);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof ApiError ? err.message : (err as Error).message;
+        setError(msg);
+        setHasHistory(false);
+      })
+      .finally(() => setLoading(false));
+  }, [marketId]);
+
+  const chartData = useMemo(() => history.filter((p) => p.mid !== null && Number.isFinite(p.mid)).map((p) => ({ time: p.capturedAtIso, p: p.mid as number })), [history]);
+  const latest = chartData[chartData.length - 1];
+  const isExpired = analysis ? analysis.timeRemaining <= 0 : false;
+
+  if (loading) {
+    return (
+      <div className="sooth-glass-card">
+        <PanelHeader
+          right={<span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{analysis ? pct(analysis.marketProbability) : "—"} <span style={{ color: COLOR.faint, fontSize: 11 }}>now</span></span>}
+        >
+          Market probability — history
+        </PanelHeader>
+        <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: COLOR.faint, fontSize: 13 }}>Loading history…</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="sooth-glass-card">
+        <PanelHeader>Market probability — history</PanelHeader>
+        <div style={{ padding: 12, border: `1px solid ${COLOR.down}`, borderRadius: 6, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace" }}>{error}</div>
+      </div>
+    );
+  }
+
+  if (!hasHistory || chartData.length < 2) {
+    return (
+      <div className="sooth-glass-card">
+        <PanelHeader
+          right={latest ? <span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{pct(latest.p)} <span style={{ color: COLOR.faint, fontSize: 11 }}>latest</span></span> : undefined}
+        >
+          Market probability — history
+        </PanelHeader>
+        <div style={{ height: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, border: `1px solid ${COLOR.border}`, borderRadius: 8, background: COLOR.surface2 }}>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${COLOR.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Activity size={16} color={COLOR.faint} />
+          </div>
+          <div style={{ fontSize: 13, color: COLOR.muted, fontWeight: 600 }}>Not enough history yet</div>
+          <div style={{ fontSize: 12, color: COLOR.faint, maxWidth: 280, textAlign: "center", lineHeight: 1.5 }}>This market just listed — the logger will capture its first snapshots soon. {isExpired ? "Market is expired." : ""}</div>
+          {analysis && <div style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>Current mid {pct(analysis.marketProbability)} • {history.length} snapshot(s) • <span style={{ color: COLOR.faint }}>HISTORICAL</span></div>}
+        </div>
+      </div>
+    );
+  }
+
+  const yTicks = [0.25, 0.5, 0.75, 1].filter((t) => t >= Math.min(...chartData.map((d) => d.p)) - 0.05 && t <= Math.max(...chartData.map((d) => d.p)) + 0.05);
+  return (
+    <div className="sooth-glass-card">
+      <PanelHeader
+        right={<span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{pct(latest.p)} <span style={{ color: COLOR.faint, fontSize: 11 }}>at {formatClock(latest.time)}</span></span>}
+      >
+        Market probability — {chartData.length} snapshots
       </PanelHeader>
-      {data.length <= 1 ? (
-        <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: COLOR.faint, fontSize: 13, border: `1px dashed ${COLOR.border}`, borderRadius: 8 }}>History requires snapshot endpoint — current mid shown in Top Bar. API has no /markets/:id/history yet.</div>
-      ) : (
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-            <defs>
-              <linearGradient id="sooth-prob-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={COLOR.accent} stopOpacity={0.22} />
-                <stop offset="100%" stopColor={COLOR.accent} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={COLOR.border} strokeDasharray="0" vertical={false} />
-            <XAxis dataKey="time" tickFormatter={formatClock} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={{ stroke: COLOR.border }} tickLine={false} interval={1} />
-            <YAxis domain={[0, 1]} tickFormatter={pct} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={false} tickLine={false} width={40} />
-            <Tooltip contentStyle={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 6 }} cursor={{ stroke: COLOR.accent, strokeWidth: 1, strokeDasharray: "3 3" }} />
-            <Area type="monotone" dataKey="p" stroke={COLOR.accent} strokeWidth={2} fill="url(#sooth-prob-fill)" dot={{ r: 2.5, fill: COLOR.accent, strokeWidth: 0 }} activeDot={{ r: 5, fill: COLOR.accent, stroke: COLOR.ink, strokeWidth: 2 }} />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
+      <ResponsiveContainer width="100%" height={180}>
+        <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id="sooth-prob-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLOR.accent} stopOpacity={0.22} />
+              <stop offset="100%" stopColor={COLOR.accent} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke={COLOR.border} strokeDasharray="0" vertical={false} />
+          <XAxis dataKey="time" tickFormatter={formatClock} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={{ stroke: COLOR.border }} tickLine={false} interval={Math.max(0, Math.floor(chartData.length / 5) - 1)} />
+          <YAxis domain={[0, 1]} ticks={yTicks.length > 0 ? yTicks : undefined} tickFormatter={pct} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={false} tickLine={false} width={40} />
+          <Tooltip content={<ChartTooltip />} cursor={{ stroke: COLOR.accent, strokeWidth: 1, strokeDasharray: "3 3" }} />
+          <Area type="monotone" dataKey="p" stroke={COLOR.accent} strokeWidth={2} fill="url(#sooth-prob-fill)" dot={false} activeDot={{ r: 5, fill: COLOR.accent, stroke: COLOR.ink, strokeWidth: 2 }} />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -430,16 +532,16 @@ export default function MarketDetail() {
             <button onClick={() => void load()} className="sooth-focusable" style={{ marginTop: 10, padding: "6px 12px", borderRadius: 6, border: `1px solid ${COLOR.border}`, background: COLOR.surface2, color: COLOR.text, cursor: "pointer", fontSize: 12 }}>Retry</button>
           </div>
         )}
-        {!loading && analysis && <TopBar analysis={analysis} marketId={marketId} />}
-        {!loading && analysis && <ReasoningTrace analysis={analysis} />}
-        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px" }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px", display: "flex", flexDirection: "column", gap: SPACE.panel }}>
           {!loading && analysis && (
-            <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}>
-              <div>
+            <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: SPACE.panel, alignItems: "start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: SPACE.panel }}>
+                <TopBar analysis={analysis} marketId={marketId} />
+                <ReasoningTrace analysis={analysis} />
                 <DepthChart bids={bids} asks={asks} />
-                <ProbabilityChart analysis={analysis} />
+                <ProbabilityChart marketId={marketId} analysis={analysis} />
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: SPACE.panel }}>
                 <EventLog marketId={marketId} />
                 <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} onPlaced={() => void load()} />
                 <AccountOverview />
@@ -447,7 +549,7 @@ export default function MarketDetail() {
             </div>
           )}
           {!loading && analysis && (
-            <div style={{ marginTop: 20 }}>
+            <div>
               <BottomTabs marketId={marketId} />
             </div>
           )}

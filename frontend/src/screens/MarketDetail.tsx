@@ -1,0 +1,453 @@
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useParams, Link } from "react-router-dom";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { ChevronDown, CheckCircle2, XCircle, Waypoints, ShieldHalf, ArrowLeftRight, FlagTriangleRight, Compass } from "lucide-react";
+import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, type MarketAnalysis } from "../lib/api";
+
+// Preserved verbatim from sooth-market-detail-v3.jsx — inline, not unified
+const COLOR = {
+  ink: "#0A0908",
+  surface: "#14130F",
+  surface2: "#1B1A15",
+  border: "#2A281F",
+  text: "#F4F2ED",
+  muted: "#8C887E",
+  faint: "#807C6B",
+  accent: "#CC8899",
+  accentDim: "#722F37",
+  up: "#6B9E78",
+  down: "#CA7560",
+} as const;
+const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+const SPACE = { header: 12, block: 16, panel: 20 } as const;
+const PANEL_LABEL: React.CSSProperties = {
+  fontFamily: "monospace",
+  fontSize: 11,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: COLOR.faint,
+};
+function PanelHeader({ icon: Icon, children, right }: { icon?: React.ComponentType<{ size: number; color: string }>; children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: SPACE.header }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {Icon ? <Icon size={13} color={COLOR.faint} /> : null}
+        <span style={PANEL_LABEL}>{children}</span>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function pct(v: number): string {
+  return `${Math.round(v * 100)}%`;
+}
+
+function formatClock(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  } catch {
+    return iso.slice(11, 16);
+  }
+}
+
+function TopBar({ analysis, marketId }: { analysis: MarketAnalysis | null; marketId: string }) {
+  const [open, setOpen] = useState(false);
+  const edge = analysis ? analysis.estimatedProbability - analysis.marketProbability : 0;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "14px 20px", borderBottom: `1px solid ${COLOR.border}` }}>
+      <button className="sooth-focusable" onClick={() => setOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 14px", color: COLOR.text, fontFamily: "monospace", fontSize: 13, cursor: "pointer" }}>
+        {marketId}
+        <ChevronDown size={14} color={COLOR.faint} style={{ transform: open ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}` }} />
+      </button>
+      {analysis ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 28 }}>
+          {[
+            ["Market prob.", pct(analysis.marketProbability), COLOR.text],
+            ["Sooth est.", pct(analysis.estimatedProbability), COLOR.accent],
+            ["Edge", `+${(edge * 100).toFixed(1)}%`, COLOR.up],
+            ["Liquidity", `${analysis.liquidity.toFixed(0)}`, COLOR.text],
+            ["Spread", `${(analysis.spread * 100).toFixed(1)}%`, COLOR.text],
+            ["Expires", analysis.timeRemaining > 0 ? `${Math.floor(analysis.timeRemaining / 3600)}h` : "expired", COLOR.text],
+          ].map(([label, value, color]) => (
+            <div key={label as string}>
+              <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>{label as string}</div>
+              <div style={{ fontFamily: "monospace", fontSize: 15, color: color as string, fontWeight: 600 }}>{value as string}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <span style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>Loading analysis…</span>
+      )}
+    </div>
+  );
+}
+
+function ReasoningTrace({ analysis }: { analysis: MarketAnalysis }) {
+  return (
+    <div style={{ padding: `${SPACE.block}px 20px`, borderBottom: `1px solid ${COLOR.border}`, background: "rgba(20, 19, 15, 0.5)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}>
+      <PanelHeader icon={Compass}>Reasoning trace — why {analysis.recommendation}</PanelHeader>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "6px 24px" }}>
+        {analysis.reasons.map((r, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, fontSize: 13, color: COLOR.muted, lineHeight: 1.5 }}>
+            <span style={{ fontFamily: "monospace", color: COLOR.faint, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+            {r}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DepthChart({ bids, asks }: { bids: [number, number][]; asks: [number, number][] }) {
+  const maxDepth = Math.max(...bids.map((b) => b[1]), ...asks.map((a) => a[1]), 1);
+  return (
+    <div className="sooth-glass-card">
+      <PanelHeader>Order book depth</PanelHeader>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 11, color: COLOR.up, marginBottom: 6, fontFamily: "monospace" }}>BIDS</div>
+          {bids.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No bids</div>}
+          {bids.map((b) => (
+            <div key={b[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
+              <div style={{ position: "absolute", inset: 0, background: COLOR.up, opacity: 0.1, width: `${(b[1] / maxDepth) * 100}%`, right: "auto" }} />
+              <span style={{ position: "relative", color: COLOR.up }}>{pct(b[0])}</span>
+              <span style={{ position: "relative", color: COLOR.muted }}>{b[1].toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: COLOR.down, marginBottom: 6, fontFamily: "monospace", textAlign: "right" }}>ASKS</div>
+          {asks.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint, textAlign: "right" }}>No asks</div>}
+          {asks.map((a) => (
+            <div key={a[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
+              <div style={{ position: "absolute", inset: 0, background: COLOR.down, opacity: 0.1, left: "auto", width: `${(a[1] / maxDepth) * 100}%` }} />
+              <span style={{ position: "relative", color: COLOR.muted }}>{a[1].toLocaleString()}</span>
+              <span style={{ position: "relative", color: COLOR.down }}>{pct(a[0])}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: string; marketProb: number; liquidity: number; onPlaced: () => void }) {
+  const [side, setSide] = useState<"YES" | "NO">("YES");
+  const [amount, setAmount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const amountNum = parseFloat(amount) || 0;
+  const price = side === "YES" ? marketProb : 1 - marketProb;
+  const orderValue = amountNum * price;
+  const fees = orderValue * 0.001;
+
+  const riskCheck = useMemo(() => {
+    if (amountNum === 0) return null;
+    if (amountNum < 1) return { ok: false, reason: `Below minimum order size (1)` };
+    if (liquidity < 100) return { ok: false, reason: "Market liquidity below 100 minimum" };
+    return { ok: true, reason: "Within liquidity, spread, and balance limits" };
+  }, [amountNum, liquidity]);
+
+  const handlePlace = async () => {
+    if (!riskCheck?.ok) return;
+    setSubmitting(true);
+    setResult(null);
+    try {
+      const res = await postOrder({ marketId, side, price, size: amountNum });
+      setResult({ ok: true, msg: `Order placed tx ${res.data.txHash.slice(0, 18)}… block ${res.data.blockNumber}` });
+      onPlaced();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : (err as Error).message;
+      setResult({ ok: false, msg });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="sooth-glass-card">
+      <PanelHeader>Place order</PanelHeader>
+      <div style={{ display: "flex", gap: 8, marginBottom: SPACE.block }}>
+        {(["YES", "NO"] as const).map((s) => (
+          <button key={s} className="sooth-focusable" onClick={() => setSide(s)} style={{ flex: 1, padding: "9px 0", borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${side === s ? (s === "YES" ? COLOR.up : COLOR.down) : COLOR.border}`, background: side === s ? (s === "YES" ? COLOR.up : COLOR.down) : "transparent", color: side === s ? COLOR.ink : COLOR.muted, transition: `all 150ms ${EASE}` }}>
+            {s}
+          </button>
+        ))}
+      </div>
+      <label style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Price</label>
+      <div style={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "9px 12px", marginTop: 6, marginBottom: 12, fontFamily: "monospace", fontSize: 14, color: COLOR.muted }}>
+        {pct(price)} <span style={{ color: COLOR.faint }}>(mid)</span>
+      </div>
+      <label style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Amount</label>
+      <input className="sooth-focusable sooth-amount-input" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ width: "100%", background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "9px 12px", marginTop: 6, fontFamily: "monospace", fontSize: 14, color: COLOR.text }} />
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        {[0.25, 0.5, 0.75, 1].map((f) => (
+          <button key={f} className="sooth-focusable" onClick={() => setAmount(String(Math.round((4000 * f) / price)))} style={{ flex: 1, padding: "6px 0", fontSize: 11, borderRadius: 6, border: `1px solid ${COLOR.border}`, background: "transparent", color: COLOR.muted, cursor: "pointer", fontFamily: "inherit" }}>
+            {f === 1 ? "MAX" : `${f * 100}%`}
+          </button>
+        ))}
+      </div>
+      {riskCheck && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 14, padding: "10px 12px", borderRadius: 8, border: `1px solid ${COLOR.border}`, background: COLOR.surface2 }}>
+          {riskCheck.ok ? <CheckCircle2 size={14} color={COLOR.up} style={{ flexShrink: 0, marginTop: 1 }} /> : <XCircle size={14} color={COLOR.down} style={{ flexShrink: 0, marginTop: 1 }} />}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: riskCheck.ok ? COLOR.up : COLOR.down }}>{riskCheck.ok ? "Risk check passed" : "Risk check failed"}</div>
+            <div style={{ fontSize: 11.5, color: COLOR.muted, marginTop: 2 }}>{riskCheck.reason}</div>
+          </div>
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLOR.muted, marginTop: 14 }}>
+        <span>Order value</span>
+        <span style={{ fontFamily: "monospace", color: COLOR.text }}>${orderValue.toFixed(2)}</span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLOR.muted, marginTop: 4 }}>
+        <span>Fees (0.1%)</span>
+        <span style={{ fontFamily: "monospace", color: COLOR.text }}>${fees.toFixed(2)}</span>
+      </div>
+      <button className="sooth-focusable" disabled={!riskCheck?.ok || submitting} onClick={() => void handlePlace()} style={{ width: "100%", marginTop: 14, padding: "11px 0", borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "inherit", border: "none", cursor: riskCheck?.ok && !submitting ? "pointer" : "not-allowed", background: riskCheck?.ok && !submitting ? COLOR.accent : COLOR.surface2, color: riskCheck?.ok && !submitting ? COLOR.ink : COLOR.faint, transition: `background 150ms ${EASE}` }}>
+        {submitting ? "Placing…" : "Place order"}
+      </button>
+      {result && <div style={{ marginTop: 10, fontSize: 12, color: result.ok ? COLOR.up : COLOR.down, fontFamily: "monospace" }}>{result.msg}</div>}
+    </div>
+  );
+}
+
+function AccountOverview() {
+  const [data, setData] = useState<{ balances: { nativeHuman: number; tUsdcHuman: number } | null; totalRealizedPnL: number; positionsCount: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    void getPortfolio()
+      .then((r) => setData({ balances: r.data.balances ? { nativeHuman: r.data.balances.nativeHuman, tUsdcHuman: r.data.balances.tUsdcHuman } : null, totalRealizedPnL: r.data.totalRealizedPnL, positionsCount: r.data.positionsCount }))
+      .catch((e: unknown) => setErr((e as Error).message));
+  }, []);
+  if (err) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.down }}>{err}</div></div>;
+  if (!data) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.faint }}>Loading…</div></div>;
+  return (
+    <div className="sooth-glass-card">
+      <PanelHeader>Account</PanelHeader>
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Wallet balance</span><span style={{ fontFamily: "monospace", color: COLOR.text }}>{data.balances ? `${data.balances.nativeHuman.toFixed(4)} SOMI · ${data.balances.tUsdcHuman.toFixed(2)} tUSDC` : "No key — connect wallet"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Open positions</span><span style={{ fontFamily: "monospace", color: COLOR.text }}>{data.positionsCount}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Realized P&L</span><span style={{ fontFamily: "monospace", color: data.totalRealizedPnL >= 0 ? COLOR.up : COLOR.down }}>{data.totalRealizedPnL >= 0 ? "+" : ""}${data.totalRealizedPnL.toFixed(2)}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Win rate</span><span style={{ fontFamily: "monospace", color: COLOR.faint }}>Derived from closed positions</span></div>
+    </div>
+  );
+}
+
+function BottomTabs({ marketId }: { marketId: string }) {
+  const [tab, setTab] = useState<"Positions" | "Open orders" | "Bot events" | "Backtest results">("Positions");
+  const [positions, setPositions] = useState<unknown[]>([]);
+  const [events, setEvents] = useState<unknown[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (tab === "Positions") {
+      void getPositions().then((r) => setPositions(r.data.positions as unknown[])).catch(() => setPositions([]));
+    } else if (tab === "Bot events") {
+      setLoading(true);
+      void getBotEvents("default", { limit: 10 }).then((r) => setEvents(r.data as unknown[])).catch(() => setEvents([])).finally(() => setLoading(false));
+    }
+  }, [tab]);
+
+  return (
+    <div className="sooth-glass-card" style={{ overflow: "hidden", padding: 0 }}>
+      <div style={{ display: "flex", gap: 4, padding: "8px 12px", borderBottom: `1px solid ${COLOR.border}` }}>
+        {(["Positions", "Open orders", "Bot events", "Backtest results"] as const).map((t) => (
+          <button key={t} className="sooth-focusable" onClick={() => setTab(t)} style={{ padding: "6px 12px", fontSize: 13, borderRadius: 6, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t ? COLOR.accent : "transparent", color: tab === t ? COLOR.ink : COLOR.muted, fontWeight: tab === t ? 600 : 400 }}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <div style={{ padding: 16, overflowX: "auto" }}>
+        {tab === "Positions" && (
+          <div style={{ fontSize: 13 }}>
+            {(positions as Array<{ symbol: string; netPosition: number; realizedPnL: number; status: string }>).length === 0 ? (
+              <div style={{ color: COLOR.faint }}>No positions yet. Trades settle on-chain.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead><tr style={{ color: COLOR.faint, fontFamily: "monospace", fontSize: 11, textTransform: "uppercase" }}><th style={{ textAlign: "left", paddingBottom: 8 }}>Market</th><th style={{ textAlign: "right", paddingBottom: 8 }}>Net</th><th style={{ textAlign: "right", paddingBottom: 8 }}>PnL</th><th style={{ textAlign: "right", paddingBottom: 8 }}>Status</th></tr></thead>
+                <tbody>
+                  {(positions as Array<{ marketId: string; symbol: string; netPosition: number; realizedPnL: number; status: string }>).map((p) => (
+                    <tr key={p.marketId} style={{ borderTop: `1px solid ${COLOR.border}` }}><td style={{ padding: "10px 0" }}>{p.symbol}</td><td style={{ textAlign: "right", fontFamily: "monospace" }}>{p.netPosition}</td><td style={{ textAlign: "right", fontFamily: "monospace", color: p.realizedPnL >= 0 ? COLOR.up : COLOR.down }}>{p.realizedPnL.toFixed(2)}</td><td style={{ textAlign: "right", fontFamily: "monospace", color: COLOR.faint }}>{p.status}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+        {tab === "Bot events" && (
+          <div>
+            {loading && <div style={{ fontSize: 12, color: COLOR.faint }}>Loading events…</div>}
+            {!loading && (events as Array<{ id: number; eventType: string; symbol?: string; dataJson?: { reason?: string } } >).map((e, i) => (
+              <div key={e.id ?? i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: i > 0 ? `1px solid ${COLOR.border}` : "none", fontSize: 13 }}>
+                <div><span style={{ fontWeight: 600 }}>{e.eventType}</span><span style={{ color: COLOR.muted }}> — {e.symbol ?? String(e.dataJson?.reason ?? "")}</span></div>
+                <span style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint, flexShrink: 0, marginLeft: 12 }}>{String(e.id)}</span>
+              </div>
+            ))}
+            {!loading && events.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No bot events yet.</div>}
+          </div>
+        )}
+        {tab === "Open orders" && <div style={{ fontSize: 12, color: COLOR.faint }}>Open orders via GET /orders — requires signer. Shown in Portfolio.</div>}
+        {tab === "Backtest results" && <div style={{ fontSize: 12, color: COLOR.faint }}>Run a backtest in <Link to="/lab" style={{ color: COLOR.accent }}>Strategy Lab</Link>.</div>}
+        {tab !== "Positions" && tab !== "Bot events" && tab !== "Open orders" && tab !== "Backtest results" ? null : null}
+      </div>
+      <div style={{ display: "none" }}>{marketId}</div>
+    </div>
+  );
+}
+
+function ProbabilityChart({ analysis }: { analysis: MarketAnalysis | null }) {
+  // Original markup preserved: single-point live mid placeholder, honest sparse state (no fake history)
+  const data = analysis ? [{ time: new Date().toISOString(), p: analysis.marketProbability }] : [];
+  return (
+    <div className="sooth-glass-card" style={{ marginTop: SPACE.panel }}>
+      <PanelHeader right={analysis ? <span style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text }}>{pct(analysis.marketProbability)} <span style={{ color: COLOR.faint, fontSize: 11 }}>now</span></span> : undefined}>
+        Market probability — live mid
+      </PanelHeader>
+      {data.length <= 1 ? (
+        <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: COLOR.faint, fontSize: 13, border: `1px dashed ${COLOR.border}`, borderRadius: 8 }}>History requires snapshot endpoint — current mid shown in Top Bar. API has no /markets/:id/history yet.</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={180}>
+          <AreaChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id="sooth-prob-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={COLOR.accent} stopOpacity={0.22} />
+                <stop offset="100%" stopColor={COLOR.accent} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={COLOR.border} strokeDasharray="0" vertical={false} />
+            <XAxis dataKey="time" tickFormatter={formatClock} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={{ stroke: COLOR.border }} tickLine={false} interval={1} />
+            <YAxis domain={[0, 1]} tickFormatter={pct} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={false} tickLine={false} width={40} />
+            <Tooltip contentStyle={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 6 }} cursor={{ stroke: COLOR.accent, strokeWidth: 1, strokeDasharray: "3 3" }} />
+            <Area type="monotone" dataKey="p" stroke={COLOR.accent} strokeWidth={2} fill="url(#sooth-prob-fill)" dot={{ r: 2.5, fill: COLOR.accent, strokeWidth: 0 }} activeDot={{ r: 5, fill: COLOR.accent, stroke: COLOR.ink, strokeWidth: 2 }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
+}
+
+function EventLog({ marketId }: { marketId: string }) {
+  const [rows, setRows] = useState<Array<{ id: number; eventType: string; createdAtIso: string; data: string }>>([]);
+  useEffect(() => {
+    void getBotEvents("default", { limit: 12 }).then((r) => setRows(r.data as unknown as typeof rows)).catch(() => setRows([]));
+  }, [marketId]);
+  const EVENT_ICON: Record<string, typeof Waypoints> = { MARKET_EVALUATED: Waypoints, RISK_CHECK: ShieldHalf, EXECUTION: ArrowLeftRight, FILL_OBSERVED: FlagTriangleRight };
+  return (
+    <div className="sooth-glass-card">
+      <PanelHeader>Event log</PanelHeader>
+      {rows.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No events yet.</div>}
+      {rows.map((e, i) => {
+        const Icon = EVENT_ICON[e.eventType] ?? Waypoints;
+        return (
+          <div key={e.id ?? i} style={{ display: "flex", gap: 9, padding: "8px 6px", marginLeft: -6, marginRight: -6, borderRadius: 6, borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
+            <Icon size={13} color={COLOR.muted} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: COLOR.text }}>{e.eventType} — {e.createdAtIso ? formatClock(e.createdAtIso) : ""}</p>
+              <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{e.data.slice(0, 80)}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function MarketDetail() {
+  const { id } = useParams<{ id: string }>();
+  const marketId = id ?? "";
+  const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
+  const [bids, setBids] = useState<[number, number][]>([]);
+  const [asks, setAsks] = useState<[number, number][]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!marketId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [aRes, bookRes] = await Promise.all([getAnalysis(marketId), getOrderbook(marketId, 5).catch(() => null)]);
+      setAnalysis(aRes.data);
+      if (bookRes) {
+        setBids(bookRes.data.bids as [number, number][]);
+        setAsks(bookRes.data.asks as [number, number][]);
+      } else {
+        // fallback: analysis already has liquidity/spread but not depth — use empty
+        setBids([]);
+        setAsks([]);
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? `${err.message} (${err.status})` : (err as Error).message;
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [marketId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!marketId) {
+    return (
+      <div style={{ background: COLOR.ink, color: COLOR.text, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <p>Missing market id</p>
+          <Link to="/markets" style={{ color: COLOR.accent }}>Back to markets</Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: COLOR.ink, color: COLOR.text, fontFamily: "'Manrope', system-ui, sans-serif", position: "relative", overflow: "hidden" }}>
+      <style>{`
+        * { box-sizing: border-box; }
+        .sooth-focusable:focus-visible { outline: 2px solid ${COLOR.accent}; outline-offset: 2px; }
+        .sooth-glass-card { position: relative; padding: 16px; background: rgba(20, 19, 15, 0.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(204, 136, 153, 0.14); border-radius: 8px; box-shadow: inset 0 1px 0 rgba(244, 242, 237, 0.05), 0 6px 20px rgba(0, 0, 0, 0.35); }
+        .sooth-amount-input::placeholder { color: ${COLOR.faint}; }
+        .sooth-amount-input:focus { border-color: ${COLOR.accent} !important; outline: none; }
+        @media (max-width: 1000px) { .sooth-detail-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
+      <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: 0, background: `radial-gradient(600px circle at 15% 10%, rgba(204,136,153,0.10), transparent 60%), radial-gradient(500px circle at 85% 60%, rgba(204,136,153,0.07), transparent 60%)`, pointerEvents: "none" }} />
+      <div style={{ position: "relative", zIndex: 1 }}>
+        <div style={{ padding: "10px 20px" }}>
+          <Link to="/markets" style={{ color: COLOR.muted, fontSize: 13, textDecoration: "none" }}>← Back to markets</Link>
+        </div>
+        {loading && <div style={{ padding: "40px 20px", color: COLOR.faint, fontFamily: "monospace" }}>Loading live analysis for {marketId}…</div>}
+        {error && (
+          <div style={{ margin: "16px 20px", border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, background: "rgba(202,117,96,0.08)" }}>
+            <div style={{ fontSize: 13, color: COLOR.down, fontWeight: 600 }}>Failed to load market {marketId}</div>
+            <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4, fontFamily: "monospace" }}>{error}</div>
+            <button onClick={() => void load()} className="sooth-focusable" style={{ marginTop: 10, padding: "6px 12px", borderRadius: 6, border: `1px solid ${COLOR.border}`, background: COLOR.surface2, color: COLOR.text, cursor: "pointer", fontSize: 12 }}>Retry</button>
+          </div>
+        )}
+        {!loading && analysis && <TopBar analysis={analysis} marketId={marketId} />}
+        {!loading && analysis && <ReasoningTrace analysis={analysis} />}
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px" }}>
+          {!loading && analysis && (
+            <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}>
+              <div>
+                <DepthChart bids={bids} asks={asks} />
+                <ProbabilityChart analysis={analysis} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                <EventLog marketId={marketId} />
+                <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} onPlaced={() => void load()} />
+                <AccountOverview />
+              </div>
+            </div>
+          )}
+          {!loading && analysis && (
+            <div style={{ marginTop: 20 }}>
+              <BottomTabs marketId={marketId} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

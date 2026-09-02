@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Radar, BarChart3, History, CheckCircle2, Activity, Target, SlidersHorizontal, KeyRound, Rocket, Eye } from "lucide-react";
+import { Radar, BarChart3, History, CheckCircle2, Activity } from "lucide-react";
 
 // Original palette from sooth-landing-full-v7.jsx — preserved byte-for-byte, not unified
 const COLOR = {
@@ -39,28 +39,16 @@ function IllustrationExecute() {
 function IllustrationMonitor() {
   return <Activity size={40} color={COLOR.accent} strokeWidth={1.4} />;
 }
-function IllustrationStrategy() {
-  return <Target size={32} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationConfigure() {
-  return <SlidersHorizontal size={32} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationAuthorize() {
-  return <KeyRound size={32} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationDeploy() {
-  return <Rocket size={32} color={COLOR.accent} strokeWidth={1.4} />;
-}
-function IllustrationWatch() {
-  return <Eye size={32} color={COLOR.accent} strokeWidth={1.4} />;
-}
-
-const AUTOMATION_STEPS: Array<{ Illustration: () => React.JSX.Element; title: string; detail: string }> = [
-  { Illustration: IllustrationStrategy, title: "Create strategy", detail: "Pick momentum, mean-reversion, or a plain edge threshold." },
-  { Illustration: IllustrationConfigure, title: "Configure rules", detail: "Position size, loss limits, minimum liquidity — you set every bound." },
-  { Illustration: IllustrationAuthorize, title: "Authorize", detail: "Grant a limited operator key. It can trade. It can't withdraw." },
-  { Illustration: IllustrationDeploy, title: "Deploy", detail: "The bot starts reading live markets through the same pipeline." },
-  { Illustration: IllustrationWatch, title: "Monitor", detail: "Watch it run, or stop it the moment a rule is violated." },
+const AUTOMATION_STEPS: Array<{ num: string; title: string; detail: string }> = [
+  { num: "01", title: "Create strategy", detail: "Pick momentum, mean-reversion, or a plain edge threshold." },
+  { num: "02", title: "Configure rules", detail: "Position size, loss limits, minimum liquidity — you set every bound." },
+  {
+    num: "03",
+    title: "Authorize",
+    detail: "Sooth trades from a dedicated wallet you fund separately — only what you're willing to risk. Exposure is capped by the risk engine's position and loss limits, not by unlimited access to your main funds. Event Contracts don't currently support the on-chain operator-key model that spot trading does, so Sooth enforces exposure limits in software instead.",
+  },
+  { num: "04", title: "Deploy", detail: "The bot starts reading live markets through the same pipeline." },
+  { num: "05", title: "Monitor", detail: "Watch it run, or stop it the moment a rule is violated." },
 ];
 
 function EcosystemLayers({ reducedMotion }: { reducedMotion: boolean }) {
@@ -123,12 +111,13 @@ const WHY_SOOTH = [
   { title: "Automation", detail: "Let a defined strategy run without babysitting every tick." },
 ];
 
-const PRODUCT_STEPS = ["Markets", "Market Detail", "Strategy Lab", "Bot Builder", "Portfolio"] as const;
-
 const FAQS: Array<{ q: string; a: string }> = [
   { q: "What is Sooth?", a: "An intelligence and execution layer built around DreamDEX Event Contracts on Somnia — it reads the live order book, prices real edge, and can execute or automate a strategy." },
   { q: "Is Sooth a prediction engine?", a: "No. Sooth doesn't force a prediction on every market. When there isn't a real edge, it says so — NO TRADE is a legitimate result, not an error." },
-  { q: "Does the bot control my funds?", a: "No. Automated strategies run through a limited operator key that can place and cancel orders but can never withdraw funds from your wallet." },
+  {
+    q: "Does the bot control my funds?",
+    a: "Sooth trades from a dedicated wallet you fund separately — only that balance is at risk. Event Contracts don't currently support the on-chain operator-key restriction that spot trading does, so exposure is capped by the risk engine's position and loss limits in software, not by a contract-level withdrawal block. Fund only what you're willing to risk.",
+  },
   { q: "What network is this on?", a: "Sooth is built on Somnia and trades through DreamDEX's on-chain CLOB. It's currently live on testnet." },
 ];
 
@@ -245,6 +234,9 @@ export default function Landing() {
           .sooth-reveal { transform: none !important; opacity: 1 !important; transition: none !important; }
           .sooth-btn-primary:active, .sooth-btn-outline:active { transform: none !important; }
         }
+        .sooth-screen-card { border: 1px solid ${COLOR.border}; border-radius: 8px; padding: 16px; flex: 1 1 180px; background: ${COLOR.surface}; cursor: pointer; transition: border-color 180ms ${EASE}, transform 180ms ${EASE}, box-shadow 180ms ${EASE}; }
+        .sooth-screen-card:hover { border-color: ${COLOR.accent}55; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(204,136,153,0.08); }
+        .sooth-screen-card:focus-visible { outline: 2px solid ${COLOR.accent}; outline-offset: 2px; }
         @media (max-width: 767px) {
           .sooth-desktop-nav { display: none !important; }
           .sooth-mobile-toggle { display: flex !important; }
@@ -379,15 +371,20 @@ export default function Landing() {
         <section style={{ padding: "80px 0", borderBottom: `1px solid ${COLOR.border}` }}>
           <SectionHeading eyebrow="Automation">You define the rules. Sooth executes them.</SectionHeading>
           <div className="sooth-grid-2" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 32 }}>
-            {AUTOMATION_STEPS.map(({ Illustration, title, detail }, i) => (
+            {AUTOMATION_STEPS.map(({ num, title, detail }, i) => (
               <Reveal key={title} delay={i * 60}>
-                <Illustration />
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginTop: 18, color: COLOR.text }}>{title}</h3>
-                <p style={{ fontSize: 13, color: COLOR.muted, marginTop: 6, lineHeight: 1.45 }}>{detail}</p>
+                <div style={{ borderTop: `2px solid ${COLOR.accent}22`, paddingTop: 16 }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 28, fontWeight: 800, letterSpacing: "-0.04em", color: COLOR.accent, lineHeight: 1 }}>{num}</div>
+                  <div style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: COLOR.faint, marginTop: 4 }}>{String(i + 1).padStart(2, "0")} — {title.toUpperCase()}</div>
+                  <h3 style={{ fontSize: 16, fontWeight: 600, marginTop: 12, color: COLOR.text, marginBottom: 0 }}>{title}</h3>
+                  <p style={{ fontSize: 13, color: COLOR.muted, marginTop: 6, lineHeight: 1.45 }}>{detail}</p>
+                </div>
               </Reveal>
             ))}
           </div>
-          <p style={{ maxWidth: "56ch", color: COLOR.muted, fontSize: 15, marginTop: 40, lineHeight: 1.6 }}>Bots run through a limited operator key — it can place and cancel orders, but it can never withdraw from your wallet.</p>
+          <p style={{ maxWidth: "56ch", color: COLOR.muted, fontSize: 15, marginTop: 40, lineHeight: 1.6 }}>
+            Sooth runs from a separately funded wallet — only that balance is at risk. Event Contracts don&apos;t support an on-chain operator-key withdrawal block like spot does, so the risk engine caps exposure via position and loss limits in software.
+          </p>
         </section>
 
         <section style={{ padding: "80px 0", borderBottom: `1px solid ${COLOR.border}` }}>
@@ -400,10 +397,124 @@ export default function Landing() {
         <section style={{ padding: "80px 0", borderBottom: `1px solid ${COLOR.border}` }}>
           <SectionHeading eyebrow="Inside the app">Five screens. One continuous flow.</SectionHeading>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-            {PRODUCT_STEPS.map((step) => (
-              <div key={step} style={{ border: `1px solid ${COLOR.border}`, borderRadius: 6, padding: "24px 20px", flex: "1 1 180px" }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>{step}</span>
-              </div>
+            {[
+              {
+                label: "Markets",
+                to: "/markets",
+                hint: "Live order-book edge",
+                preview: (
+                  <div style={{ height: 72, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
+                    <div style={{ display: "flex", gap: 4, height: 28 }}>
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, justifyContent: "center" }}>
+                        <div style={{ height: 5, background: "#6B9E78", opacity: 0.95, borderRadius: 2, width: "78%" }} />
+                        <div style={{ height: 5, background: "#6B9E78", opacity: 0.6, borderRadius: 2, width: "58%" }} />
+                        <div style={{ height: 5, background: "#6B9E78", opacity: 0.4, borderRadius: 2, width: "88%" }} />
+                      </div>
+                      <div style={{ width: 1, background: COLOR.border }} />
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, justifyContent: "center" }}>
+                        <div style={{ height: 5, background: "#CA7560", opacity: 0.9, borderRadius: 2, width: "68%" }} />
+                        <div style={{ height: 5, background: "#CA7560", opacity: 0.6, borderRadius: 2, width: "82%" }} />
+                        <div style={{ height: 5, background: "#CA7560", opacity: 0.4, borderRadius: 2, width: "62%" }} />
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, fontWeight: 800, letterSpacing: "0.04em", background: "#6B9E78", color: COLOR.ink, padding: "1px 4px", borderRadius: 3 }}>TRADE</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>+4.2% edge</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.accent, marginLeft: "auto" }}>2.1% spr</span>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                label: "Market Detail",
+                to: "/markets",
+                hint: "Depth + probability",
+                preview: (
+                  <div style={{ height: 72, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+                    <svg width="100%" height="36" viewBox="0 0 120 36" style={{ display: "block" }}>
+                      <path d="M0 26 C 20 24, 40 18, 60 14 S 90 6, 120 4" stroke={COLOR.accent} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+                      <circle cx="60" cy="14" r="2.5" fill={COLOR.accent} />
+                      <rect x="0" y="30" width="120" height="1" fill={COLOR.border} />
+                    </svg>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>48% → 63%</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78" }}>+7.0% edge</span>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                label: "Strategy Lab",
+                to: "/lab",
+                hint: "Backtest equity",
+                preview: (
+                  <div style={{ height: 72, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+                    <svg width="100%" height="36" viewBox="0 0 120 36" style={{ display: "block" }}>
+                      <path d="M0 28 L 15 26 L 30 22 L 45 24 L 60 18 L 75 16 L 90 10 L 105 12 L 120 4" stroke={COLOR.accent} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      <rect x="0" y="0" width="120" height="36" fill={COLOR.accent} opacity="0.06" />
+                    </svg>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.muted, borderTop: `1px solid ${COLOR.border}`, paddingTop: 2 }}>128 trades</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78" }}>58% win</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint, marginLeft: "auto" }}>4.2% avg</span>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                label: "Bot Builder",
+                to: "/bots",
+                hint: "Ticks & fills",
+                preview: (
+                  <div style={{ height: 72, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#6B9E78", boxShadow: "0 0 6px rgba(107,158,120,0.6)", flexShrink: 0 }} />
+                      <span style={{ fontFamily: "monospace", fontSize: 9, color: COLOR.text, fontWeight: 700 }}>Bot #1 — running</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 7, color: COLOR.faint, marginLeft: "auto" }}>tick 42</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 2 }}>
+                      <div style={{ height: 5, background: COLOR.surface, border: `1px solid ${COLOR.border}`, borderRadius: 2, width: "100%", opacity: 0.9 }} />
+                      <div style={{ height: 5, background: COLOR.surface, border: `1px solid ${COLOR.border}`, borderRadius: 2, width: "84%", opacity: 0.7 }} />
+                      <div style={{ height: 5, background: COLOR.surface, border: `1px solid ${COLOR.border}`, borderRadius: 2, width: "91%", opacity: 0.5 }} />
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                label: "Portfolio",
+                to: "/portfolio",
+                hint: "Balances & P&L",
+                preview: (
+                  <div style={{ height: 72, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 800, color: COLOR.text }}>1,240 tUSDC</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78", background: "rgba(107,158,120,0.14)", padding: "1px 4px", borderRadius: 3 }}>+ $38.20</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 6px", background: COLOR.surface, borderRadius: 3, border: `1px solid ${COLOR.border}` }}>
+                        <span style={{ fontSize: 8, color: COLOR.muted }}>ETH 0.8 @ 62%</span>
+                        <span style={{ fontFamily: "monospace", fontSize: 8, color: "#6B9E78" }}>+2.1%</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 6px", background: COLOR.surface, borderRadius: 3, border: `1px solid ${COLOR.border}`, opacity: 0.85 }}>
+                        <span style={{ fontSize: 8, color: COLOR.muted }}>BTC 0.4 @ 41%</span>
+                        <span style={{ fontFamily: "monospace", fontSize: 8, color: COLOR.faint }}>NO_TRADE</span>
+                      </div>
+                    </div>
+                  </div>
+                ),
+              },
+            ].map(({ label, to, hint, preview }) => (
+              <button
+                key={label}
+                onClick={() => navigate(to)}
+                className="sooth-screen-card sooth-focusable"
+                style={{ textAlign: "left", background: COLOR.surface, color: COLOR.text, fontFamily: "inherit" }}
+                aria-label={`${label} — ${hint}`}
+              >
+                <div style={{ background: COLOR.ink, border: `1px solid ${COLOR.border}`, borderRadius: 6, padding: 8, marginBottom: 12 }}>{preview}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.01em", color: COLOR.text }}>{label}</div>
+                <div style={{ fontSize: 12, color: COLOR.faint, fontFamily: "monospace", marginTop: 2 }}>{hint}</div>
+              </button>
             ))}
           </div>
         </section>

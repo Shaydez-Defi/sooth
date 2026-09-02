@@ -196,28 +196,34 @@ function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: s
   return (
     <div className="sooth-glass-card">
       <PanelHeader>Place order</PanelHeader>
-      <div style={{ display: "flex", gap: 8, marginBottom: SPACE.block }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {(["YES", "NO"] as const).map((s) => (
-          <button key={s} className="sooth-focusable" onClick={() => setSide(s)} style={{ flex: 1, padding: "9px 0", borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${side === s ? (s === "YES" ? COLOR.up : COLOR.down) : COLOR.border}`, background: side === s ? (s === "YES" ? COLOR.up : COLOR.down) : "transparent", color: side === s ? COLOR.ink : COLOR.muted, transition: `all 150ms ${EASE}` }}>
+          <button key={s} className="sooth-focusable" onClick={() => setSide(s)} style={{ flex: 1, padding: "8px 0", borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${side === s ? (s === "YES" ? COLOR.up : COLOR.down) : COLOR.border}`, background: side === s ? (s === "YES" ? COLOR.up : COLOR.down) : "transparent", color: side === s ? COLOR.ink : COLOR.muted, transition: `all 150ms ${EASE}` }}>
             {s}
           </button>
         ))}
       </div>
-      <label style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Price</label>
-      <div style={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "9px 12px", marginTop: 6, marginBottom: 12, fontFamily: "monospace", fontSize: 14, color: COLOR.muted }}>
-        {pct(price)} <span style={{ color: COLOR.faint }}>(mid)</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div>
+          <label style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Price</label>
+          <div style={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 10px", marginTop: 4, fontFamily: "monospace", fontSize: 13, color: COLOR.muted }}>
+            {pct(price)} <span style={{ color: COLOR.faint }}>(mid)</span>
+          </div>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Amount</label>
+          <input className="sooth-focusable sooth-amount-input" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ width: "100%", background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 10px", marginTop: 4, fontFamily: "monospace", fontSize: 13, color: COLOR.text }} />
+        </div>
       </div>
-      <label style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Amount</label>
-      <input className="sooth-focusable sooth-amount-input" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={{ width: "100%", background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "9px 12px", marginTop: 6, fontFamily: "monospace", fontSize: 14, color: COLOR.text }} />
-      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
         {[0.25, 0.5, 0.75, 1].map((f) => (
-          <button key={f} className="sooth-focusable" onClick={() => setAmount(String(Math.round((4000 * f) / price)))} style={{ flex: 1, padding: "6px 0", fontSize: 11, borderRadius: 6, border: `1px solid ${COLOR.border}`, background: "transparent", color: COLOR.muted, cursor: "pointer", fontFamily: "inherit" }}>
+          <button key={f} className="sooth-focusable" onClick={() => setAmount(String(Math.round((4000 * f) / price)))} style={{ flex: 1, padding: "5px 0", fontSize: 11, borderRadius: 6, border: `1px solid ${COLOR.border}`, background: "transparent", color: COLOR.muted, cursor: "pointer", fontFamily: "inherit" }}>
             {f === 1 ? "MAX" : `${f * 100}%`}
           </button>
         ))}
       </div>
       {riskCheck && (
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 14, padding: "10px 12px", borderRadius: 8, border: `1px solid ${COLOR.border}`, background: COLOR.surface2 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 10, padding: "8px 10px", borderRadius: 8, border: `1px solid ${COLOR.border}`, background: COLOR.surface2 }}>
           {riskCheck.ok ? <CheckCircle2 size={14} color={COLOR.up} style={{ flexShrink: 0, marginTop: 1 }} /> : <XCircle size={14} color={COLOR.down} style={{ flexShrink: 0, marginTop: 1 }} />}
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, color: riskCheck.ok ? COLOR.up : COLOR.down }}>{riskCheck.ok ? "Risk check passed" : "Risk check failed"}</div>
@@ -225,18 +231,16 @@ function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: s
           </div>
         </div>
       )}
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLOR.muted, marginTop: 14 }}>
-        <span>Order value</span>
-        <span style={{ fontFamily: "monospace", color: COLOR.text }}>${orderValue.toFixed(2)}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: COLOR.muted, marginTop: 10, padding: "8px 10px", background: COLOR.surface2, borderRadius: 6, border: `1px solid ${COLOR.border}` }}>
+        <span>Value <span style={{ fontFamily: "monospace", color: COLOR.text }}>${orderValue.toFixed(2)}</span></span>
+        <span style={{ color: COLOR.faint }}>|</span>
+        <span>Fee <span style={{ fontFamily: "monospace", color: COLOR.text }}>${fees.toFixed(2)}</span></span>
+        <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>(0.1%)</span>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: COLOR.muted, marginTop: 4 }}>
-        <span>Fees (0.1%)</span>
-        <span style={{ fontFamily: "monospace", color: COLOR.text }}>${fees.toFixed(2)}</span>
-      </div>
-      <button className="sooth-focusable" disabled={!riskCheck?.ok || submitting} onClick={() => void handlePlace()} style={{ width: "100%", marginTop: 14, padding: "11px 0", borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "inherit", border: "none", cursor: riskCheck?.ok && !submitting ? "pointer" : "not-allowed", background: riskCheck?.ok && !submitting ? COLOR.accent : COLOR.surface2, color: riskCheck?.ok && !submitting ? COLOR.ink : COLOR.faint, transition: `background 150ms ${EASE}` }}>
+      <button className="sooth-focusable" disabled={!riskCheck?.ok || submitting} onClick={() => void handlePlace()} style={{ width: "100%", marginTop: 10, padding: "10px 0", borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "inherit", border: "none", cursor: riskCheck?.ok && !submitting ? "pointer" : "not-allowed", background: riskCheck?.ok && !submitting ? COLOR.accent : COLOR.surface2, color: riskCheck?.ok && !submitting ? COLOR.ink : COLOR.faint, transition: `background 150ms ${EASE}` }}>
         {submitting ? "Placing…" : "Place order"}
       </button>
-      {result && <div style={{ marginTop: 10, fontSize: 12, color: result.ok ? COLOR.up : COLOR.down, fontFamily: "monospace" }}>{result.msg}</div>}
+      {result && <div style={{ marginTop: 8, fontSize: 11, color: result.ok ? COLOR.up : COLOR.down, fontFamily: "monospace" }}>{result.msg}</div>}
     </div>
   );
 }
@@ -254,10 +258,26 @@ function AccountOverview() {
   return (
     <div className="sooth-glass-card">
       <PanelHeader>Account</PanelHeader>
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Wallet balance</span><span style={{ fontFamily: "monospace", color: COLOR.text }}>{data.balances ? `${data.balances.nativeHuman.toFixed(4)} SOMI · ${data.balances.tUsdcHuman.toFixed(2)} tUSDC` : "No key - connect wallet"}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Open positions</span><span style={{ fontFamily: "monospace", color: COLOR.text }}>{data.positionsCount}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Realized P&L</span><span style={{ fontFamily: "monospace", color: data.totalRealizedPnL >= 0 ? COLOR.up : COLOR.down }}>{data.totalRealizedPnL >= 0 ? "+" : ""}${data.totalRealizedPnL.toFixed(2)}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span style={{ color: COLOR.muted }}>Win rate</span><span style={{ fontFamily: "monospace", color: COLOR.faint }}>Derived from closed positions</span></div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
+        <div>
+          <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Wallet</div>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.text, marginTop: 2, lineHeight: 1.3 }}>{data.balances ? `${data.balances.nativeHuman.toFixed(3)} SOMI` : "—"}</div>
+          <div style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.muted }}>{data.balances ? `${data.balances.tUsdcHuman.toFixed(2)} tUSDC` : "No key"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Positions</div>
+          <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: COLOR.text, marginTop: 2 }}>{data.positionsCount}</div>
+          <div style={{ fontSize: 11, color: COLOR.faint }}>open</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Realized P&L</div>
+          <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: data.totalRealizedPnL >= 0 ? COLOR.up : COLOR.down, marginTop: 2 }}>{data.totalRealizedPnL >= 0 ? "+" : ""}${data.totalRealizedPnL.toFixed(2)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Win rate</div>
+          <div style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, marginTop: 2, lineHeight: 1.3 }}>Closed only</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -550,17 +570,13 @@ export default function MarketDetail() {
                 <ReasoningTrace analysis={analysis} />
                 <DepthChart bids={bids} asks={asks} />
                 <ProbabilityChart marketId={marketId} analysis={analysis} />
+                <BottomTabs marketId={marketId} />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <EventLog marketId={marketId} />
                 <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} onPlaced={() => void load()} />
                 <AccountOverview />
               </div>
-            </div>
-          )}
-          {!loading && analysis && (
-            <div>
-              <BottomTabs marketId={marketId} />
             </div>
           )}
         </div>

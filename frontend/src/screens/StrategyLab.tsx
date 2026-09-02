@@ -268,12 +268,22 @@ export default function StrategyLab() {
           <div>
             {activeTab === "Analyze" ? (
               <>
-                {analysisError && <div style={{ border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, marginBottom: 12, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace" }}>{analysisError}</div>}
+                {analysisError && (
+                  <div style={{ border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, marginBottom: 12, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace", lineHeight: 1.5 }}>
+                    <div>{analysisError}</div>
+                    {analysisError.includes("API not reachable") && <div style={{ marginTop: 6, color: COLOR.muted, fontSize: 11 }}>Start the API with <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code> from the repo root.</div>}
+                  </div>
+                )}
                 <SignalAnalysisPanel analysis={analysis} marketLabel={marketOptions.find((o) => o.id === marketKey)?.label ?? marketKey} />
               </>
             ) : (
               <>
-                {backtestError && <div style={{ border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, marginBottom: 12, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace" }}>{backtestError}</div>}
+                {backtestError && (
+                  <div style={{ border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, marginBottom: 12, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace", lineHeight: 1.5 }}>
+                    <div>{backtestError}</div>
+                    {backtestError.includes("API not reachable") && <div style={{ marginTop: 6, color: COLOR.muted, fontSize: 11 }}>Start the API with <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code>.</div>}
+                  </div>
+                )}
                 {backtestNote && <div style={{ border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: 12, marginBottom: 12, color: COLOR.faint, fontSize: 13 }}>{backtestNote}</div>}
                 {metrics ? (
                   <>

@@ -302,8 +302,15 @@ export default function SoothMarkets() {
 
         {loading && <div style={{ marginTop: 16, fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>Loading live markets…</div>}
         {error && (
-          <div style={{ marginTop: 12, border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: "10px 12px", background: "rgba(202,117,96,0.08)", fontSize: 12, color: COLOR.down, fontFamily: "monospace" }}>
-            Failed to load: {error} — <button onClick={() => void load()} style={{ background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>retry</button>
+          <div style={{ marginTop: 12, border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: "10px 12px", background: "rgba(202,117,96,0.08)", fontSize: 12, color: COLOR.down, fontFamily: "monospace", lineHeight: 1.5 }}>
+            <div>Failed to load markets: {error}</div>
+            {error.includes("API not reachable") && (
+              <div style={{ marginTop: 6, color: COLOR.muted, fontSize: 11 }}>
+                Tip: the frontend needs the backend API on <span style={{ color: COLOR.text }}>{typeof window !== "undefined" ? (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:3000" : "http://localhost:3000"}</span>
+                . Open a second terminal and run <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code> from the repo root, then retry.
+              </div>
+            )}
+            <button onClick={() => void load()} style={{ marginTop: 8, background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>retry</button>
           </div>
         )}
 

@@ -45,7 +45,12 @@ export default function Bots() {
       </div>
 
       {loading && <div style={{ marginTop: 24, color: COLOR.faint, fontFamily: "monospace", fontSize: 13 }}>Loading bot performance…</div>}
-      {error && <div style={{ marginTop: 16, border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace" }}>{error}</div>}
+      {error && (
+        <div style={{ marginTop: 16, border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, background: "rgba(202,117,96,0.08)", color: COLOR.down, fontSize: 12, fontFamily: "monospace", lineHeight: 1.5 }}>
+          <div>{error}</div>
+          {error.includes("API not reachable") && <div style={{ marginTop: 6, color: COLOR.muted, fontSize: 11 }}>Start the API with <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code> from the repo root.</div>}
+        </div>
+      )}
 
       {!loading && perf && (
         <>

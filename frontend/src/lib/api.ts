@@ -38,7 +38,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch (err) {
-    throw new ApiError(`Network error fetching ${path}: ${(err as Error).message}`, 0, null, null);
+    const hint =
+      (err as Error).message.includes("Failed to fetch") || (err as Error).message.includes("NetworkError")
+        ? ` — API not reachable at ${API_BASE}. Is the backend running? In a separate terminal run: npm run api  (from repo root, port 3000). If using a different URL, set VITE_API_BASE_URL in frontend/.env and restart vite.`
+        : "";
+    throw new ApiError(`Network error fetching ${path}: ${(err as Error).message}${hint}`, 0, null, null);
   }
   const text = await res.text();
   let body: unknown;

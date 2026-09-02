@@ -222,7 +222,7 @@ function AccountOverview() {
       .then((r) => setData({ balances: r.data.balances ? { nativeHuman: r.data.balances.nativeHuman, tUsdcHuman: r.data.balances.tUsdcHuman } : null, totalRealizedPnL: r.data.totalRealizedPnL, positionsCount: r.data.positionsCount }))
       .catch((e: unknown) => setErr((e as Error).message));
   }, []);
-  if (err) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.down }}>{err}</div></div>;
+  if (err) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.down, lineHeight: 1.5 }}>{err}{err.includes("API not reachable") && <span style={{ display: "block", marginTop: 6, color: COLOR.muted, fontSize: 11 }}>API down — run <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code></span>}</div></div>;
   if (!data) return <div className="sooth-glass-card"><PanelHeader>Account</PanelHeader><div style={{ fontSize: 12, color: COLOR.faint }}>Loading…</div></div>;
   return (
     <div className="sooth-glass-card">
@@ -421,7 +421,12 @@ export default function MarketDetail() {
         {error && (
           <div style={{ margin: "16px 20px", border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, background: "rgba(202,117,96,0.08)" }}>
             <div style={{ fontSize: 13, color: COLOR.down, fontWeight: 600 }}>Failed to load market {marketId}</div>
-            <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4, fontFamily: "monospace" }}>{error}</div>
+            <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4, fontFamily: "monospace", lineHeight: 1.5 }}>{error}</div>
+            {error.includes("API not reachable") && (
+              <div style={{ fontSize: 11, color: COLOR.muted, marginTop: 6 }}>
+                Tip: start the API with <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>npm run api</code> from the repo root (port 3000). Check <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>VITE_API_BASE_URL</code> in <code style={{ background: COLOR.surface2, padding: "1px 6px", borderRadius: 4, color: COLOR.text }}>frontend/.env</code>.
+              </div>
+            )}
             <button onClick={() => void load()} className="sooth-focusable" style={{ marginTop: 10, padding: "6px 12px", borderRadius: 6, border: `1px solid ${COLOR.border}`, background: COLOR.surface2, color: COLOR.text, cursor: "pointer", fontSize: 12 }}>Retry</button>
           </div>
         )}

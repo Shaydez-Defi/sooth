@@ -12,6 +12,7 @@ import MarketDetail from "./screens/MarketDetail";
 import StrategyLab from "./screens/StrategyLab";
 import Portfolio from "./screens/Portfolio";
 import Bots from "./screens/Bots";
+import Docs from "./screens/Docs";
 
 function TopNav() {
   const [walletOpen, setWalletOpen] = useState(false);
@@ -39,6 +40,7 @@ function TopNav() {
           <NavLink to="/lab" style={({ isActive }) => activeStyle(isActive)}>Strategy Lab</NavLink>
           <NavLink to="/portfolio" style={({ isActive }) => activeStyle(isActive)}>Portfolio</NavLink>
           <NavLink to="/bots" style={({ isActive }) => activeStyle(isActive)}>Bots</NavLink>
+          <NavLink to="/docs" style={({ isActive }) => activeStyle(isActive)}>Docs</NavLink>
         </div>
         <button onClick={() => setWalletOpen(true)} style={{ background: address ? COLOR.surface2 : COLOR.accent, color: address ? COLOR.text : COLOR.ink, border: address ? `1px solid ${COLOR.border}` : "none", borderRadius: 6, padding: "8px 14px", fontWeight: 600, cursor: "pointer", fontFamily: address ? "monospace" : "inherit", fontSize: 13 }}>
           {address ? shortAddress(address) : "Connect wallet"}
@@ -61,6 +63,7 @@ export default function App() {
         <Route path="/lab" element={<StrategyLab />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/bots" element={<Bots />} />
+        <Route path="/docs" element={<Docs />} />
         <Route path="*" element={<div style={{ background: COLOR.ink, color: COLOR.text, minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}><p>Not found</p><Link to="/markets" style={{ color: COLOR.accent }}>Go to markets</Link></div>} />
       </Routes>
       </WalletProvider>

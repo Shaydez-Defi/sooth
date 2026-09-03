@@ -307,6 +307,15 @@ export interface BotsResponse {
 export function getBots(): Promise<BotsResponse> {
   return apiFetch<BotsResponse>("/bots");
 }
+export function postBotStart(id = "default"): Promise<{ data: { id: string; status: string; tickCount: number }; dataIntegrity: DataIntegrityTag }> {
+  return apiFetch(`/bots/${encodeURIComponent(id)}/start`, { method: "POST" });
+}
+export function postBotStop(id = "default"): Promise<{ data: { id: string; status: string; tickCount: number }; dataIntegrity: DataIntegrityTag }> {
+  return apiFetch(`/bots/${encodeURIComponent(id)}/stop`, { method: "POST" });
+}
+export function postBotCreate(body: Record<string, unknown>): Promise<{ data: { id: string; config: unknown }; dataIntegrity: DataIntegrityTag }> {
+  return apiFetch("/bots", { method: "POST", body: JSON.stringify(body) });
+}
 
 export interface BotPerformanceMetrics {
   readonly grossPnL: number;

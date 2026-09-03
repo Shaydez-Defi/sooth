@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { postAnalyze, postBacktest } from "../lib/api";
 // Original palette from sooth-landing-full-v7.jsx - preserved byte-for-byte, not unified
 const COLOR = {
@@ -244,7 +244,7 @@ export default function Landing() {
               <a href="#pipeline" className="sooth-link">How it works</a>
               <a href="#why" className="sooth-link">Why Sooth</a>
               <a href="#faq" className="sooth-link">FAQ</a>
-              <a href="#" className="sooth-link">Docs</a>
+              <Link to="/docs" className="sooth-link">Docs</Link>
             </nav>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <button className="sooth-mobile-toggle sooth-focusable" onClick={() => setMenuOpen((v) => !v)} style={{ display: "none", background: "none", border: `1px solid ${COLOR.border}`, borderRadius: 6, padding: 8, color: COLOR.text }}>
@@ -262,7 +262,7 @@ export default function Landing() {
               <a href="#pipeline" className="sooth-link">How it works</a>
               <a href="#why" className="sooth-link">Why Sooth</a>
               <a href="#faq" className="sooth-link">FAQ</a>
-              <a href="#" className="sooth-link">Docs</a>
+              <Link to="/docs" className="sooth-link">Docs</Link>
             </nav>
           )}
         </header>
@@ -561,7 +561,7 @@ export default function Landing() {
         </section>
 
         <footer style={{ padding: "64px 0 32px" }}>
-          <div className="sooth-footer-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 40 }}>
+          <div className="sooth-footer-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 40 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <OrbMark size={20} />
@@ -578,19 +578,10 @@ export default function Landing() {
             </div>
             <div>
               <h4 style={{ fontSize: 12, color: COLOR.faint, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 16 }}>Resources</h4>
-              {["Documentation", "GitHub", "DreamDEX", "Somnia"].map((l) => (
-                <a key={l} href="#" className="sooth-link" style={{ display: "block", marginBottom: 10 }}>
-                  {l}
-                </a>
-              ))}
-            </div>
-            <div>
-              <h4 style={{ fontSize: 12, color: COLOR.faint, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 16 }}>Community</h4>
-              {["X", "Discord"].map((l) => (
-                <a key={l} href="#" className="sooth-link" style={{ display: "block", marginBottom: 10 }}>
-                  {l}
-                </a>
-              ))}
+              <Link to="/docs" className="sooth-link" style={{ display: "block", marginBottom: 10 }}>Documentation</Link>
+              <a href="https://github.com/Shaydez-Defi/sooth" target="_blank" rel="noreferrer" className="sooth-link" style={{ display: "block", marginBottom: 10 }}>GitHub</a>
+              <a href="https://github.com/somnia-chain/dreamdex-bot-kit" target="_blank" rel="noreferrer" className="sooth-link" style={{ display: "block", marginBottom: 10 }}>DreamDEX</a>
+              <a href="https://testnet.somnia.network" target="_blank" rel="noreferrer" className="sooth-link" style={{ display: "block", marginBottom: 10 }}>Somnia</a>
             </div>
           </div>
           <div style={{ borderTop: `1px solid ${COLOR.border}`, marginTop: 40, paddingTop: 24, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>

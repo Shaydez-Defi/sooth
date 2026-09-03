@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, ChevronRight, ChevronUp, ChevronDown, Info, TrendingUp } from "lucide-react";
-import { ApiError, postAnalyze, type MarketAnalysis } from "../lib/api";
+import { ApiError, postAnalyze, getMarkets, type MarketAnalysis } from "../lib/api";
+import { formatMarket } from "../lib/formatMarket";
 
 // ── Preserved verbatim from sooth-markets-v3.jsx - do not unify, flagged as follow-up duplication
 const COLOR = {
@@ -25,10 +26,13 @@ const MAX_SPREAD = 0.06;
 const MIN_EDGE = 0.02;
 const SECONDS_PER_HOUR = 3600;
 
-// Type for enriched row derived from live MarketAnalysis - visual shape identical to original
+// Type for enriched row derived from live MarketAnalysis - visual shape identical to original, now with human-readable label
 type EnrichedRow = {
   id: string;
-  label: string;
+  label: string; // human-readable primary (question or asset+timing)
+  sublabel: string; // raw symbol secondary muted
+  tooltip: string;
+  rawSymbol: string;
   marketProb: number;
   soothEst: number;
   edge: number;
@@ -213,15 +217,32 @@ export default function SoothMarkets() {
     setLoading(true);
     setError(null);
     try {
-      const res = await postAnalyze({ all: true });
-      const enriched: EnrichedRow[] = res.data.map((d) => {
+      const [marketsRes, analyzeRes] = await Promise.all([getMarkets().catch(() => null), postAnalyze({ all: true })]);
+      const marketMap = new Map<string, { asset: string; expiry: string | null; intervalSec: number | null; interval: string | null; question: string | null; strike: string | null; symbol: string }>();
+      if (marketsRes) {
+        for (const m of marketsRes.data) {
+          marketMap.set(m.marketId, { asset: m.asset, expiry: m.expiry, intervalSec: m.intervalSec, interval: m.interval, question: m.question, strike: m.strike, symbol: m.symbol });
+          marketMap.set(m.symbol, { asset: m.asset, expiry: m.expiry, intervalSec: m.intervalSec, interval: m.interval, question: m.question, strike: m.strike, symbol: m.symbol });
+        }
+      }
+      const enriched: EnrichedRow[] = analyzeRes.data.map((d) => {
         const a = d.analysis;
         const { tier, illiquid } = computeTier(a);
-        // expiresInHrs derived from timeRemaining seconds → hours, matching original expiresInHrs shape
         const expiresInHrs = Math.max(0, Math.round(a.timeRemaining / SECONDS_PER_HOUR));
+        const info = marketMap.get(a.marketId) ?? marketMap.get(a.symbol) ?? null;
+        const fmt = info
+          ? formatMarket({ marketId: a.marketId, symbol: a.symbol, asset: info.asset, expiry: info.expiry, intervalSec: info.intervalSec, interval: info.interval, question: info.question, strike: info.strike })
+          : formatMarket({ marketId: a.marketId, symbol: a.symbol, asset: "?", expiry: null, intervalSec: null, interval: null, question: null, strike: null });
+        // Fallback: if backend didn't return question/interval, formatMarket will use asset+timing honestly - never fabricated price question
+        if (!fmt.hasQuestion && info && a.timeRemaining !== undefined) {
+          // Ensure expiry is used even if marketMap missing - already handled via formatMarket
+        }
         return {
           id: a.marketId,
-          label: a.symbol,
+          label: fmt.primary,
+          sublabel: fmt.secondary,
+          tooltip: fmt.tooltip,
+          rawSymbol: a.symbol,
           marketProb: a.marketProbability,
           soothEst: a.estimatedProbability,
           edge: a.edge,
@@ -236,6 +257,11 @@ export default function SoothMarkets() {
           reasons: a.reasons,
         };
       });
+      // Report if any market's fields didn't parse cleanly (honest, not silent)
+      const broken = enriched.filter((r) => r.label === r.rawSymbol && r.sublabel === "");
+      if (broken.length > 0) {
+        console.warn(`[Markets] ${broken.length} market(s) fell back to raw symbol - fields missing or unparsable:`, broken.map((b) => b.rawSymbol));
+      }
       setRows(enriched);
     } catch (err) {
       const msg = err instanceof ApiError ? `${err.message} (${err.status})` : (err as Error).message;
@@ -250,7 +276,8 @@ export default function SoothMarkets() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    let r = rows.filter((m) => m.label.toLowerCase().includes(query.toLowerCase()));
+    const q = query.toLowerCase();
+    let r = rows.filter((m) => m.label.toLowerCase().includes(q) || m.sublabel.toLowerCase().includes(q) || m.rawSymbol.toLowerCase().includes(q));
     if (statusTab === "Trade") r = r.filter((m) => m.tier === "TRADE");
     if (statusTab === "Wait") r = r.filter((m) => m.tier === "WAIT");
     if (statusTab === "No") r = r.filter((m) => m.tier === "NO");
@@ -391,9 +418,12 @@ export default function SoothMarkets() {
                       opacity: rowOpacity,
                     }}
                   >
-                    <span className="sooth-cell-label" style={{ fontSize: 14, paddingRight: 12, display: "inline-flex", alignItems: "center", gap: 8, color: m.isExpired ? COLOR.faint : COLOR.text }}>
+                    <span className="sooth-cell-label" style={{ paddingRight: 12, display: "inline-flex", alignItems: "center", gap: 8, color: m.isExpired ? COLOR.faint : COLOR.text }} title={m.tooltip}>
                       {!m.isExpired && <span className="sooth-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLOR.up, display: "inline-block", flexShrink: 0 }} aria-hidden="true" />}
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.2, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: m.isExpired ? COLOR.faint : COLOR.text }}>{m.label}</span>
+                        {m.sublabel && <span style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", lineHeight: 1.2, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.sublabel}</span>}
+                      </span>
                     </span>
                     <span className="sooth-cell" data-label="Price" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.isExpired ? COLOR.faint : COLOR.muted }}>{pct(m.marketProb)}</span>
                     <span className="sooth-cell" data-label="Sooth Est." style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: soothEstColor }}>{pct(m.soothEst)}</span>

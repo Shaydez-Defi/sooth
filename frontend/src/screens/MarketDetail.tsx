@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import { ChevronDown, CheckCircle2, XCircle, Activity } from "lucide-react";
-import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, type MarketAnalysis } from "../lib/api";
+import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, getMarketById, type MarketAnalysis } from "../lib/api";
+import { formatMarket, formatSymbolFallback } from "../lib/formatMarket";
 
 // Preserved verbatim from sooth-market-detail-v3.jsx - inline, not unified
 const COLOR = {
@@ -54,14 +55,19 @@ function formatClock(iso: string): string {
   }
 }
 
-function TopBar({ analysis, marketId }: { analysis: MarketAnalysis | null; marketId: string }) {
+function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | null; marketId: string; formatted: { label: string; sublabel: string; title: string } | null }) {
   const [open, setOpen] = useState(false);
   const edge = analysis ? analysis.estimatedProbability - analysis.marketProbability : 0;
+  const displayLabel = formatted ? formatted.label : marketId;
+  const displaySub = formatted ? formatted.sublabel : "";
   return (
     <div className="sooth-glass-card" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-      <button className="sooth-focusable" onClick={() => setOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 14px", color: COLOR.text, fontFamily: "monospace", fontSize: 13, cursor: "pointer" }}>
-        {marketId}
-        <ChevronDown size={14} color={COLOR.faint} style={{ transform: open ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}` }} />
+      <button className="sooth-focusable" onClick={() => setOpen((v) => !v)} title={formatted ? formatted.title : marketId} style={{ display: "flex", alignItems: "center", gap: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 14px", color: COLOR.text, fontFamily: "monospace", fontSize: 13, cursor: "pointer", maxWidth: 360, textAlign: "left" }}>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 12, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: COLOR.text }}>{displayLabel}</span>
+          {displaySub && <span style={{ display: "block", fontSize: 10, color: COLOR.faint, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displaySub}</span>}
+        </span>
+        <ChevronDown size={14} color={COLOR.faint} style={{ transform: open ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}`, flexShrink: 0 }} />
       </button>
       {analysis ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
@@ -314,9 +320,12 @@ function BottomTabs({ marketId }: { marketId: string }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead><tr style={{ color: COLOR.faint, fontFamily: "monospace", fontSize: 11, textTransform: "uppercase" }}><th style={{ textAlign: "left", paddingBottom: 8 }}>Market</th><th style={{ textAlign: "right", paddingBottom: 8 }}>Net</th><th style={{ textAlign: "right", paddingBottom: 8 }}>PnL</th><th style={{ textAlign: "right", paddingBottom: 8 }}>Status</th></tr></thead>
                 <tbody>
-                  {(positions as Array<{ marketId: string; symbol: string; netPosition: number; realizedPnL: number; status: string }>).map((p) => (
-                    <tr key={p.marketId} style={{ borderTop: `1px solid ${COLOR.border}` }}><td style={{ padding: "10px 0" }}>{p.symbol}</td><td style={{ textAlign: "right", fontFamily: "monospace" }}>{p.netPosition}</td><td style={{ textAlign: "right", fontFamily: "monospace", color: p.realizedPnL >= 0 ? COLOR.up : COLOR.down }}>{p.realizedPnL.toFixed(2)}</td><td style={{ textAlign: "right", fontFamily: "monospace", color: COLOR.faint }}>{p.status}</td></tr>
-                  ))}
+                  {(positions as Array<{ marketId: string; symbol: string; netPosition: number; realizedPnL: number; status: string }>).map((p) => {
+                    const fmt = formatSymbolFallback(p.symbol);
+                    return (
+                      <tr key={p.marketId} style={{ borderTop: `1px solid ${COLOR.border}` }}><td style={{ padding: "10px 0" }} title={fmt.title}><span style={{ display: "block", lineHeight: 1.2, color: COLOR.text }}>{fmt.label}</span><span style={{ display: "block", fontSize: 11, color: COLOR.faint, fontFamily: "monospace", lineHeight: 1.2 }}>{fmt.sublabel || p.symbol}</span></td><td style={{ textAlign: "right", fontFamily: "monospace" }}>{p.netPosition}</td><td style={{ textAlign: "right", fontFamily: "monospace", color: p.realizedPnL >= 0 ? COLOR.up : COLOR.down }}>{p.realizedPnL.toFixed(2)}</td><td style={{ textAlign: "right", fontFamily: "monospace", color: COLOR.faint }}>{p.status}</td></tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -326,18 +335,23 @@ function BottomTabs({ marketId }: { marketId: string }) {
           <div>
             {loading && <div style={{ fontSize: 12, color: COLOR.faint }}>Loading events…</div>}
             {!loading &&
-              (events as Array<{ id: number; eventType: string; symbol?: string; dataJson?: { reason?: string } }>).map((e, i) => (
-                <div key={e.id ?? i} style={{ display: "flex", gap: 10, padding: "8px 0", borderTop: i > 0 ? `1px solid ${COLOR.border}` : "none", alignItems: "flex-start" }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: COLOR.faint, flexShrink: 0, marginTop: 7, opacity: 0.7 }} aria-hidden="true" />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.text, fontWeight: 600 }}>{e.eventType.toLowerCase()}</span>
-                      <span style={{ fontSize: 12, color: COLOR.muted }}>{e.symbol ?? String(e.dataJson?.reason ?? "")}</span>
+              (events as Array<{ id: number; eventType: string; symbol?: string; dataJson?: { reason?: string } }>).map((e, i) => {
+                const sym = e.symbol ?? "";
+                const fmt = sym ? formatSymbolFallback(sym) : null;
+                return (
+                  <div key={e.id ?? i} style={{ display: "flex", gap: 10, padding: "8px 0", borderTop: i > 0 ? `1px solid ${COLOR.border}` : "none", alignItems: "flex-start" }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: COLOR.faint, flexShrink: 0, marginTop: 7, opacity: 0.7 }} aria-hidden="true" />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.text, fontWeight: 600 }}>{e.eventType.toLowerCase()}</span>
+                        <span style={{ fontSize: 12, color: COLOR.muted }} title={fmt ? fmt.title : ""}>{fmt ? fmt.label : String(e.dataJson?.reason ?? "")}</span>
+                      </div>
+                      {fmt && fmt.sublabel && <div style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint, marginTop: 2 }}>{fmt.sublabel}</div>}
                     </div>
+                    <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, flexShrink: 0, marginLeft: 12 }}>#{String(e.id)}</span>
                   </div>
-                  <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, flexShrink: 0, marginLeft: 12 }}>#{String(e.id)}</span>
-                </div>
-              ))}
+                );
+              })}
             {!loading && events.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No bot events yet.</div>}
           </div>
         )}
@@ -457,7 +471,7 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
 }
 
 function EventLog({ marketId }: { marketId: string }) {
-  const [rows, setRows] = useState<Array<{ id: number; eventType: string; createdAtIso: string; data: string }>>([]);
+  const [rows, setRows] = useState<Array<{ id: number; eventType: string; createdAtIso: string; data: string; marketId: string | null; symbol: string | null }>>([]);
   useEffect(() => {
     void getBotEvents("default", { limit: 12 }).then((r) => setRows(r.data as unknown as typeof rows)).catch(() => setRows([]));
   }, [marketId]);
@@ -471,18 +485,24 @@ function EventLog({ marketId }: { marketId: string }) {
     <div className="sooth-glass-card">
       <PanelHeader>Event log</PanelHeader>
       {rows.length === 0 && <div style={{ fontSize: 12, color: COLOR.faint }}>No events yet.</div>}
-      {rows.map((e, i) => (
-        <div key={e.id ?? i} style={{ display: "flex", gap: 10, padding: "8px 6px", marginLeft: -6, marginRight: -6, borderRadius: 6, borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none", alignItems: "flex-start" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor(e.eventType), flexShrink: 0, marginTop: 7, opacity: 0.9 }} aria-hidden="true" />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-              <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.text, fontWeight: 600, letterSpacing: "0.02em" }}>{e.eventType.toLowerCase()}</span>
-              <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{e.createdAtIso ? formatClock(e.createdAtIso) : ""}</span>
+      {rows.map((e, i) => {
+        const sym = (e as unknown as { symbol?: string | null }).symbol ?? (e as unknown as { marketId?: string | null }).marketId ?? null;
+        const fmt = sym ? formatSymbolFallback(sym) : null;
+        return (
+          <div key={e.id ?? i} style={{ display: "flex", gap: 10, padding: "8px 6px", marginLeft: -6, marginRight: -6, borderRadius: 6, borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none", alignItems: "flex-start" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor(e.eventType), flexShrink: 0, marginTop: 7, opacity: 0.9 }} aria-hidden="true" />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.text, fontWeight: 600, letterSpacing: "0.02em" }}>{e.eventType.toLowerCase()}</span>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>{e.createdAtIso ? formatClock(e.createdAtIso) : ""}</span>
+                {fmt && <span style={{ fontSize: 11, color: COLOR.muted, fontFamily: "monospace" }} title={fmt.title}>{fmt.label}</span>}
+              </div>
+              <div style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.data.slice(0, 80)}</div>
+              {fmt && fmt.sublabel && <div style={{ fontFamily: "monospace", fontSize: 9, color: COLOR.faint, marginTop: 1 }}>{fmt.sublabel}</div>}
             </div>
-            <div style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.data.slice(0, 80)}</div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -495,13 +515,18 @@ export default function MarketDetail() {
   const [asks, setAsks] = useState<[number, number][]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [formatted, setFormatted] = useState<{ label: string; sublabel: string; title: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!marketId) return;
     setLoading(true);
     setError(null);
     try {
-      const [aRes, bookRes] = await Promise.all([getAnalysis(marketId), getOrderbook(marketId, 5).catch(() => null)]);
+      const [aRes, bookRes, detailRes] = await Promise.all([
+        getAnalysis(marketId),
+        getOrderbook(marketId, 5).catch(() => null),
+        getMarketById(marketId).catch(() => null),
+      ]);
       setAnalysis(aRes.data);
       if (bookRes) {
         setBids(bookRes.data.bids as [number, number][]);
@@ -510,6 +535,28 @@ export default function MarketDetail() {
         // fallback: analysis already has liquidity/spread but not depth - use empty
         setBids([]);
         setAsks([]);
+      }
+      // Build human-readable label from real API fields - never fabricate a price question
+      if (detailRes && detailRes.data && detailRes.data.unified) {
+        const info = detailRes.data.unified.info as unknown as { asset?: string; intervalSec?: number; interval?: string; expiry?: number | string; question?: string | null; strike?: string | number | null };
+        const fmt = formatMarket({
+          marketId,
+          symbol: detailRes.data.unified.symbol,
+          asset: String(info.asset ?? "?"),
+          expiry: info.expiry !== undefined && info.expiry !== null ? String(info.expiry) : null,
+          intervalSec: typeof info.intervalSec === "number" ? info.intervalSec : null,
+          interval: typeof info.interval === "string" ? info.interval : null,
+          question: typeof info.question === "string" ? info.question : null,
+          strike: info.strike !== undefined && info.strike !== null ? String(info.strike) : null,
+        });
+        setFormatted({ label: fmt.primary, sublabel: fmt.secondary, title: fmt.tooltip });
+        if (!fmt.hasQuestion && fmt.primary === detailRes.data.unified.symbol) {
+          console.warn(`[MarketDetail] market ${marketId} fell back to raw symbol - question/interval/expiry missing or unparsable`);
+        }
+      } else {
+        // Fallback: use symbol as primary, honest about missing fields
+        const fmt = formatMarket({ marketId, symbol: aRes.data.symbol, asset: "?", expiry: null, intervalSec: null, interval: null, question: null, strike: null });
+        setFormatted({ label: fmt.primary, sublabel: fmt.secondary, title: fmt.tooltip });
       }
     } catch (err) {
       const msg = err instanceof ApiError ? `${err.message} (${err.status})` : (err as Error).message;
@@ -566,7 +613,7 @@ export default function MarketDetail() {
           {!loading && analysis && (
             <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.65fr) 360px", gap: 16, alignItems: "start" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <TopBar analysis={analysis} marketId={marketId} />
+                <TopBar analysis={analysis} marketId={marketId} formatted={formatted} />
                 <ReasoningTrace analysis={analysis} />
                 <DepthChart bids={bids} asks={asks} />
                 <ProbabilityChart marketId={marketId} analysis={analysis} />

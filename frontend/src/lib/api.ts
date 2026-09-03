@@ -74,7 +74,11 @@ export interface MarketSummary {
   asset: string; // LIVE_INDEXER
   expiry: string | null; // LIVE_ONCHAIN (stringified bigint)
   venueId: string; // LIVE_ONCHAIN
-  dataIntegrity: { marketId: DataIntegrityTag; symbol: DataIntegrityTag; asset: DataIntegrityTag; expiry: DataIntegrityTag };
+  intervalSec: number | null; // LIVE_INDEXER
+  interval: string | null; // LIVE_INDEXER
+  question: string | null; // LIVE_INDEXER - genuine resolution description if available
+  strike: string | null; // LIVE_INDEXER
+  dataIntegrity: { marketId: DataIntegrityTag; symbol: DataIntegrityTag; asset: DataIntegrityTag; expiry: DataIntegrityTag; intervalSec: DataIntegrityTag; question: DataIntegrityTag };
 }
 
 export interface MarketsResponse {
@@ -91,8 +95,11 @@ export interface MarketDetailInfo {
   marketId: string;
   asset?: string;
   intervalSec?: number;
+  interval?: string;
   expiry?: number | string;
   venueId?: string;
+  question?: string | null;
+  strike?: string | number | null;
   [k: string]: unknown;
 }
 

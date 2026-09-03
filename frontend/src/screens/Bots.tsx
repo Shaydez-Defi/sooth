@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { RefreshCcw } from "lucide-react";
+import { formatSymbolFallback } from "../lib/formatMarket";
 import { COLOR } from "../components/theme";
 import { PanelHeader } from "../components/PanelHeader";
 import { ProvenanceTag } from "../components/ProvenanceTag";
@@ -88,13 +89,17 @@ export default function Bots() {
               <div style={{ fontSize: 13, color: COLOR.faint }}>No bot events yet.</div>
             ) : (
               <div>
-                {events.map((e) => (
-                  <div key={e.id} style={{ display: "flex", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLOR.border}` }}>
-                    <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, flexShrink: 0 }}>{new Date(e.createdAtIso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.accent, flexShrink: 0 }}>{e.eventType}</span>
-                    <span style={{ fontSize: 13, color: COLOR.text }}>{e.symbol ?? e.marketId ?? ""}</span>
-                  </div>
-                ))}
+                {events.map((e) => {
+                  const sym = e.symbol ?? e.marketId ?? "";
+                  const fmt = sym ? formatSymbolFallback(sym) : { label: "", sublabel: "", title: "" };
+                  return (
+                    <div key={e.id} style={{ display: "flex", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLOR.border}` }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, flexShrink: 0 }}>{new Date(e.createdAtIso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.accent, flexShrink: 0 }}>{e.eventType}</span>
+                      <span style={{ fontSize: 12, color: COLOR.text, fontFamily: "monospace" }} title={fmt.title}>{fmt.label}{fmt.sublabel ? <span style={{ color: COLOR.faint, fontSize: 10, marginLeft: 6 }}>{fmt.sublabel}</span> : null}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -28,14 +28,34 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
       const ctx = createExchange({ withSigner: false });
       const markets = await activeMarkets(ctx);
       const tagged = markets.map((m) => {
-        const info = m.info as unknown as { marketId: string; asset?: string; intervalSec?: number; expiry?: number | string; venueId?: string };
+        const info = m.info as unknown as {
+          marketId: string;
+          asset?: string;
+          intervalSec?: number;
+          interval?: string;
+          expiry?: number | string;
+          venueId?: string;
+          question?: string | null;
+          strike?: string | number | null;
+        };
         return {
           marketId: String(info.marketId), // LIVE_ONCHAIN
           symbol: m.symbol, // LIVE_INDEXER
           asset: String(info.asset ?? "?"), // LIVE_INDEXER
           expiry: info.expiry !== undefined ? String(info.expiry) : null, // LIVE_ONCHAIN
           venueId: String(info.venueId ?? ctx.config.venueId ?? ""), // LIVE_ONCHAIN
-          dataIntegrity: { marketId: "LIVE_ONCHAIN", symbol: "LIVE_INDEXER", asset: "LIVE_INDEXER", expiry: "LIVE_ONCHAIN" } as const,
+          intervalSec: typeof info.intervalSec === "number" ? info.intervalSec : null, // LIVE_INDEXER
+          interval: typeof info.interval === "string" ? info.interval : null, // LIVE_INDEXER
+          question: typeof info.question === "string" && info.question.trim() !== "" ? info.question : null, // LIVE_INDEXER - genuine resolution description if available
+          strike: info.strike !== undefined && info.strike !== null ? String(info.strike) : null, // LIVE_INDEXER
+          dataIntegrity: {
+            marketId: "LIVE_ONCHAIN",
+            symbol: "LIVE_INDEXER",
+            asset: "LIVE_INDEXER",
+            expiry: "LIVE_ONCHAIN",
+            intervalSec: "LIVE_INDEXER",
+            question: "LIVE_INDEXER",
+          } as const,
         };
       });
       await ctx.exchange.close().catch(() => undefined);

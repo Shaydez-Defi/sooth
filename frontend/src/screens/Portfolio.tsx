@@ -5,6 +5,7 @@ import { COLOR } from "../components/theme";
 import { PanelHeader } from "../components/PanelHeader";
 import { ProvenanceTag } from "../components/ProvenanceTag";
 import { ApiError, getPortfolio, getOrders, getPositions, type PortfolioResponse } from "../lib/api";
+import { formatSymbolFallback } from "../lib/formatMarket";
 
 export default function Portfolio() {
   const [data, setData] = useState<PortfolioResponse["data"] | null>(null);
@@ -96,15 +97,18 @@ export default function Portfolio() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.positions.map((p) => (
-                    <tr key={p.marketId} style={{ borderTop: `1px solid ${COLOR.border}` }}>
-                      <td style={{ padding: "10px 0" }}><Link to={`/markets/${encodeURIComponent(p.marketId)}`} style={{ color: COLOR.accent, textDecoration: "none" }}>{p.symbol}</Link></td>
-                      <td style={{ textAlign: "right", fontFamily: "monospace", color: p.side === "YES" ? COLOR.up : COLOR.down }}>{p.side}</td>
-                      <td style={{ textAlign: "right", fontFamily: "monospace" }}>{p.netPosition}</td>
-                      <td style={{ textAlign: "right", fontFamily: "monospace", color: p.realizedPnL >= 0 ? COLOR.up : COLOR.down }}>{p.realizedPnL.toFixed(2)}</td>
-                      <td style={{ textAlign: "right", fontFamily: "monospace", color: COLOR.faint }}>{p.status}</td>
-                    </tr>
-                  ))}
+                  {data.positions.map((p) => {
+                    const fmt = formatSymbolFallback(p.symbol);
+                    return (
+                      <tr key={p.marketId} style={{ borderTop: `1px solid ${COLOR.border}` }}>
+                        <td style={{ padding: "10px 0" }} title={fmt.title}><Link to={`/markets/${encodeURIComponent(p.marketId)}`} style={{ color: COLOR.accent, textDecoration: "none", display: "block", lineHeight: 1.2 }}>{fmt.label}</Link><span style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", display: "block", lineHeight: 1.2 }}>{fmt.sublabel || p.symbol}</span></td>
+                        <td style={{ textAlign: "right", fontFamily: "monospace", color: p.side === "YES" ? COLOR.up : COLOR.down }}>{p.side}</td>
+                        <td style={{ textAlign: "right", fontFamily: "monospace" }}>{p.netPosition}</td>
+                        <td style={{ textAlign: "right", fontFamily: "monospace", color: p.realizedPnL >= 0 ? COLOR.up : COLOR.down }}>{p.realizedPnL.toFixed(2)}</td>
+                        <td style={{ textAlign: "right", fontFamily: "monospace", color: COLOR.faint }}>{p.status}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -121,12 +125,15 @@ export default function Portfolio() {
               <div style={{ fontSize: 13, color: COLOR.faint }}>No open orders.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {orders.map((m) => (
-                  <div key={m.marketId} style={{ borderTop: `1px solid ${COLOR.border}`, paddingTop: 10 }}>
-                    <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>{m.symbol} - {m.marketId.slice(0, 10)}…</div>
-                    <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4 }}>{m.orders.length} order(s) - <ProvenanceTag tag={m.dataIntegrity} small /></div>
-                  </div>
-                ))}
+                {orders.map((m) => {
+                  const fmt = formatSymbolFallback(m.symbol);
+                  return (
+                    <div key={m.marketId} style={{ borderTop: `1px solid ${COLOR.border}`, paddingTop: 10 }}>
+                      <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint }} title={fmt.title}>{fmt.label} - <span style={{ color: COLOR.muted }}>{m.marketId.slice(0, 10)}…</span></div>
+                      <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4 }}>{m.orders.length} order(s) - <ProvenanceTag tag={m.dataIntegrity} small /></div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

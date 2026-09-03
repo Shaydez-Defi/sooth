@@ -45,6 +45,7 @@ type EnrichedRow = {
   tier: "TRADE" | "WAIT" | "NO";
   illiquid: boolean;
   reasons: string[];
+  analysisUnavailable: boolean;
 };
 
 function computeTier(a: MarketAnalysis): { tier: EnrichedRow["tier"]; illiquid: boolean } {
@@ -205,6 +206,7 @@ export default function SoothMarkets() {
   const [rows, setRows] = useState<EnrichedRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [analysisWarning, setAnalysisWarning] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusTab, setStatusTab] = useState<StatusTab>("All");
   const [sortKey, setSortKey] = useState<(typeof COLUMNS)[number]["key"]>("edge");
@@ -216,8 +218,51 @@ export default function SoothMarkets() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setAnalysisWarning(null);
     try {
-      const [marketsRes, analyzeRes] = await Promise.all([getMarkets().catch(() => null), postAnalyze({ all: true })]);
+      const [marketsRes, analyzeOutcome] = await Promise.all([
+        getMarkets().catch(() => null),
+        postAnalyze({ all: true })
+          .then((res) => ({ ok: true as const, res }))
+          .catch((err) => ({ ok: false as const, err })),
+      ]);
+      if (!analyzeOutcome.ok) {
+        const msg = analyzeOutcome.err instanceof ApiError ? `${analyzeOutcome.err.message} (${analyzeOutcome.err.status})` : (analyzeOutcome.err as Error).message;
+        if (marketsRes && marketsRes.data.length > 0) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const fallback: EnrichedRow[] = marketsRes.data.map((m) => {
+            const fmt = formatMarket({ marketId: m.marketId, symbol: m.symbol, asset: m.asset, expiry: m.expiry, intervalSec: m.intervalSec, interval: m.interval, question: m.question, strike: m.strike });
+            const expirySec = m.expiry !== null ? Number(m.expiry) : NaN;
+            const timeRemaining = Number.isFinite(expirySec) ? expirySec - nowSec : NaN;
+            const expiresInHrs = Number.isFinite(timeRemaining) ? Math.max(0, Math.round((timeRemaining as number) / SECONDS_PER_HOUR)) : NaN;
+            return {
+              id: m.marketId,
+              label: fmt.primary,
+              sublabel: fmt.secondary,
+              tooltip: fmt.tooltip,
+              rawSymbol: m.symbol,
+              marketProb: NaN,
+              soothEst: NaN,
+              edge: NaN,
+              liquidity: NaN,
+              spread: NaN,
+              expiresInHrs,
+              timeRemaining: Number.isFinite(timeRemaining) ? (timeRemaining as number) : 0,
+              isExpired: Number.isFinite(timeRemaining) ? (timeRemaining as number) <= 0 : false,
+              recommendation: "NO_TRADE" as const,
+              tier: "NO" as const,
+              illiquid: false,
+              reasons: ["analysis unavailable - indexer timeout"],
+              analysisUnavailable: true,
+            };
+          });
+          setRows(fallback);
+          setAnalysisWarning(msg);
+          return;
+        }
+        throw analyzeOutcome.err;
+      }
+      const analyzeRes = analyzeOutcome.res;
       const marketMap = new Map<string, { asset: string; expiry: string | null; intervalSec: number | null; interval: string | null; question: string | null; strike: string | null; symbol: string }>();
       if (marketsRes) {
         for (const m of marketsRes.data) {
@@ -255,6 +300,7 @@ export default function SoothMarkets() {
           tier,
           illiquid,
           reasons: a.reasons,
+          analysisUnavailable: false,
         };
       });
       // Report if any market's fields didn't parse cleanly (honest, not silent)
@@ -314,7 +360,7 @@ export default function SoothMarkets() {
     if (rows.length === 0) return [];
     // Derive minimal live rows: strongest signal + count summary, rendered in same ActivityFeed
     const best = [...rows].sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge))[0];
-    if (!best) return [];
+    if (!best || best.analysisUnavailable || !Number.isFinite(best.edge)) return [];
     return [
       { type: "signal" as const, text: `Edge ${best.edge >= 0 ? "+" : ""}${(best.edge * 100).toFixed(1)}% on “${best.label}”`, provenance: "DERIVED" as const, time: "now" },
     ];
@@ -358,6 +404,13 @@ export default function SoothMarkets() {
             <button onClick={() => void load()} style={{ marginTop: 8, background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>retry</button>
           </div>
         )}
+        {analysisWarning && !error && (
+          <div style={{ marginTop: 12, border: `1px solid ${COLOR.accent}`, borderRadius: 8, padding: "10px 12px", background: "rgba(204,136,153,0.06)", fontSize: 12, color: COLOR.text, fontFamily: "monospace", lineHeight: 1.5 }}>
+            <div>Analysis engine timed out - showing live market list, Price/Edge/Signal pending.</div>
+            <div style={{ marginTop: 4, color: COLOR.muted, fontSize: 11 }}>{analysisWarning}</div>
+            <button onClick={() => void load()} style={{ marginTop: 8, background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>retry analysis</button>
+          </div>
+        )}
 
         <div className="sooth-markets-grid" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 32, marginTop: 24, alignItems: "start" }}>
           <div>
@@ -393,8 +446,9 @@ export default function SoothMarkets() {
               </div>
               {!loading && sorted.length === 0 && <div style={{ padding: "40px 16px", textAlign: "center", color: COLOR.faint, fontSize: 14 }}>No markets match your filters.</div>}
               {sorted.map((m, i) => {
-                const isPositive = m.edge > 0.0001;
-                const isNegative = m.edge < -0.0001;
+                const noAnalysis = m.analysisUnavailable || !Number.isFinite(m.edge);
+                const isPositive = !noAnalysis && m.edge > 0.0001;
+                const isNegative = !noAnalysis && m.edge < -0.0001;
                 const soothEstColor = m.isExpired ? COLOR.faint : isPositive ? COLOR.accent : isNegative ? COLOR.down : COLOR.muted;
                 const edgeColor = m.isExpired ? COLOR.faint : isPositive ? COLOR.up : isNegative ? COLOR.down : COLOR.faint;
                 const rowOpacity = m.isExpired ? 0.55 : 1;
@@ -425,14 +479,20 @@ export default function SoothMarkets() {
                         {m.sublabel && <span style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", lineHeight: 1.2, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.sublabel}</span>}
                       </span>
                     </span>
-                    <span className="sooth-cell" data-label="Price" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.isExpired ? COLOR.faint : COLOR.muted }}>{pct(m.marketProb)}</span>
-                    <span className="sooth-cell" data-label="Sooth Est." style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: soothEstColor }}>{pct(m.soothEst)}</span>
+                    <span className="sooth-cell" data-label="Price" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.isExpired ? COLOR.faint : COLOR.muted }}>{noAnalysis || !Number.isFinite(m.marketProb) ? "-" : pct(m.marketProb)}</span>
+                    <span className="sooth-cell" data-label="Sooth Est." style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: soothEstColor }}>{noAnalysis || !Number.isFinite(m.soothEst) ? "-" : pct(m.soothEst)}</span>
                     <span className="sooth-cell" data-label="Edge" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: edgeColor, display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
-                      {isPositive ? <ChevronUp size={10} style={{ flexShrink: 0 }} /> : isNegative ? <ChevronDown size={10} style={{ flexShrink: 0 }} /> : null}
-                      {m.edge >= 0 ? "+" : ""}
-                      {(m.edge * 100).toFixed(1)}%
+                      {noAnalysis ? (
+                        "-"
+                      ) : (
+                        <>
+                          {isPositive ? <ChevronUp size={10} style={{ flexShrink: 0 }} /> : isNegative ? <ChevronDown size={10} style={{ flexShrink: 0 }} /> : null}
+                          {m.edge >= 0 ? "+" : ""}
+                          {(m.edge * 100).toFixed(1)}%
+                        </>
+                      )}
                     </span>
-                    <span className="sooth-cell" data-label="Expires" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.isExpired ? COLOR.faint : COLOR.muted }}>{formatHrs(m.expiresInHrs)}</span>
+                    <span className="sooth-cell" data-label="Expires" style={{ textAlign: "right", fontFamily: "monospace", fontSize: 13, color: m.isExpired ? COLOR.faint : COLOR.muted }}>{Number.isFinite(m.expiresInHrs) ? formatHrs(m.expiresInHrs) : "-"}</span>
                     <span className="sooth-cell" data-label="Signal" style={{ textAlign: "right" }}><SignalPill tier={m.tier} isExpired={m.isExpired} /></span>
                     <ChevronRight size={16} color={m.isExpired ? COLOR.faint : hoveredRow === m.id ? COLOR.text : COLOR.faint} style={{ justifySelf: "end", opacity: m.isExpired ? 0.5 : 1 }} />
                   </div>

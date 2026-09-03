@@ -1,21 +1,32 @@
-// Converted from sooth-connect-wallet.jsx - now a reusable modal component, not a standalone page.
-// Preserves original copy/noting about brand logos (wallet icons are generic lucide Wallet marks).
-
-import { useState } from "react";
-import { Search, Wallet, X, ShieldCheck, KeyRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { COLOR, EASE } from "./theme";
 import { OrbMark } from "./OrbMark";
+import { getInjectedProvider, isMobileDevice, shortAddress } from "../lib/somnia-chain";
+import { useWallet } from "../lib/useWallet";
 
-const WALLETS = ["MetaMask", "WalletConnect", "Coinbase Wallet", "Rainbow", "OKX Wallet"] as const;
-
-export function ConnectWalletModal({ open, onClose, onSelect }: { open: boolean; onClose: () => void; onSelect?: (wallet: string) => void }) {
-  const [query, setQuery] = useState("");
-  const [hoveredWallet, setHoveredWallet] = useState<string | null>(null);
+export function ConnectWalletModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { address, isCorrectChain, connecting, error, connect, disconnect, clearError } = useWallet();
+  const [hasProvider] = useState(() => getInjectedProvider() !== null);
+  const [isMobile] = useState(() => isMobileDevice());
   const [closeHover, setCloseHover] = useState(false);
+
+  useEffect(() => {
+    if (open) clearError();
+  }, [open, clearError]);
 
   if (!open) return null;
 
-  const filtered = WALLETS.filter((w) => w.toLowerCase().includes(query.toLowerCase()));
+  const handleConnect = (): void => {
+    void connect().then((ok) => {
+      if (ok) onClose();
+    });
+  };
+
+  const handleDisconnect = (): void => {
+    disconnect();
+    onClose();
+  };
 
   return (
     <div
@@ -37,9 +48,7 @@ export function ConnectWalletModal({ open, onClose, onSelect }: { open: boolean;
     >
       <style>{`
         * { box-sizing: border-box; }
-        .sooth-wallet-row { transition: background 150ms ${EASE}, border-color 150ms ${EASE}; }
         .sooth-focusable:focus-visible { outline: 2px solid ${COLOR.accent}; outline-offset: 2px; }
-        .sooth-search:focus { border-color: ${COLOR.accent} !important; }
         @media (max-width: 640px) {
           .sooth-modal-grid { grid-template-columns: 1fr !important; }
           .sooth-modal-info { border-left: none !important; border-top: 1px solid ${COLOR.border}; }
@@ -85,70 +94,73 @@ export function ConnectWalletModal({ open, onClose, onSelect }: { open: boolean;
               <OrbMark size={18} />
               <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: COLOR.text }}>Connect a wallet</h2>
             </div>
-            <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Popular</span>
-            <div style={{ position: "relative", marginTop: 12, marginBottom: 4 }}>
-              <Search size={15} color={COLOR.faint} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-              <input
-                className="sooth-search sooth-focusable"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search"
-                style={{ width: "100%", background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "9px 12px 9px 34px", fontSize: 14, color: COLOR.text, fontFamily: "inherit" }}
-              />
-            </div>
-            <div style={{ marginTop: 8 }}>
-              {filtered.length === 0 && <p style={{ fontSize: 13, color: COLOR.faint, padding: "16px 4px" }}>No wallets match &quot;{query}&quot;.</p>}
-              {filtered.map((wallet) => (
+
+            {address ? (
+              <div>
+                <p style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.text, margin: "0 0 8px", wordBreak: "break-all" }} title={address}>
+                  {shortAddress(address)}
+                </p>
+                <p style={{ fontFamily: "monospace", fontSize: 11, color: isCorrectChain ? COLOR.up : COLOR.down, margin: "0 0 16px" }}>
+                  {isCorrectChain ? "Somnia Shannon Testnet" : "Wrong network - switch to continue"}
+                </p>
+                {!isCorrectChain && (
+                  <button
+                    className="sooth-focusable"
+                    onClick={handleConnect}
+                    disabled={connecting}
+                    style={{ width: "100%", padding: "11px 0", fontSize: 14, background: COLOR.accent, color: COLOR.ink, border: "none", borderRadius: 8, fontWeight: 600, cursor: connecting ? "wait" : "pointer", fontFamily: "inherit", opacity: connecting ? 0.7 : 1, marginBottom: 8 }}
+                  >
+                    {connecting ? "Switching…" : "Switch to Somnia Shannon Testnet"}
+                  </button>
+                )}
                 <button
-                  key={wallet}
-                  className="sooth-wallet-row sooth-focusable"
-                  onMouseEnter={() => setHoveredWallet(wallet)}
-                  onMouseLeave={() => setHoveredWallet(null)}
-                  onClick={() => {
-                    onSelect?.(wallet);
-                    onClose();
-                  }}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    background: hoveredWallet === wallet ? COLOR.surface2 : "transparent",
-                    border: `1px solid ${hoveredWallet === wallet ? COLOR.border : "transparent"}`,
-                    borderRadius: 8,
-                    padding: "10px 10px",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    color: COLOR.text,
-                    fontFamily: "inherit",
-                    fontSize: 14,
-                  }}
+                  className="sooth-focusable"
+                  onClick={handleDisconnect}
+                  style={{ width: "100%", padding: "11px 0", fontSize: 14, background: "transparent", color: COLOR.muted, border: `1px solid ${COLOR.border}`, borderRadius: 8, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
                 >
-                  <span style={{ width: 28, height: 28, borderRadius: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <Wallet size={14} color={COLOR.accent} />
-                  </span>
-                  {wallet}
+                  Disconnect
                 </button>
-              ))}
-            </div>
+                {error && <p style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.down, margin: "12px 0 0", lineHeight: 1.5 }}>{error}</p>}
+              </div>
+            ) : hasProvider ? (
+              <div>
+                <button
+                  className="sooth-focusable"
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  style={{ width: "100%", display: "block", background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "12px 14px", cursor: connecting ? "wait" : "pointer", textAlign: "left", fontFamily: "inherit", opacity: connecting ? 0.7 : 1 }}
+                >
+                  <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: COLOR.text }}>
+                    {connecting ? "Connecting…" : "Injected Wallet"}
+                  </span>
+                  <span style={{ display: "block", fontSize: 12, color: COLOR.muted, marginTop: 2 }}>Your browser wallet (MetaMask, Rabby, etc.)</span>
+                </button>
+                {error && <p style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.down, margin: "12px 0 0", lineHeight: 1.5 }}>{error}</p>}
+              </div>
+            ) : isMobile ? (
+              <p style={{ fontSize: 13, color: COLOR.muted, margin: 0, lineHeight: 1.6 }}>
+                No wallet detected. Open this page inside your wallet app&apos;s browser (MetaMask, Trust Wallet, Rabby, etc.) to connect.
+              </p>
+            ) : (
+              <div>
+                <p style={{ fontSize: 13, color: COLOR.muted, margin: "0 0 12px", lineHeight: 1.6 }}>
+                  No browser wallet detected. Install MetaMask or another browser wallet extension to connect.
+                </p>
+                <a href="https://metamask.io" target="_blank" rel="noreferrer" className="sooth-focusable" style={{ fontFamily: "monospace", fontSize: 13, color: COLOR.accent, textDecoration: "none" }}>
+                  metamask.io
+                </a>
+              </div>
+            )}
           </div>
 
           <div className="sooth-modal-info" style={{ padding: "28px 24px", borderLeft: `1px solid ${COLOR.border}` }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 20px", color: COLOR.text }}>What is a wallet?</h3>
-            <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-              <ShieldCheck size={20} color={COLOR.accent} style={{ flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: COLOR.text }}>A home for your assets</p>
-                <p style={{ fontSize: 13, color: COLOR.muted, margin: "4px 0 0", lineHeight: 1.5 }}>Wallets hold what you use to trade - funds, positions, and the keys that authorize a bot on your behalf.</p>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-              <KeyRound size={20} color={COLOR.accent} style={{ flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: COLOR.text }}>No new password</p>
-                <p style={{ fontSize: 13, color: COLOR.muted, margin: "4px 0 0", lineHeight: 1.5 }}>Instead of creating an account, connect the wallet you already have - same one across every DreamDEX app.</p>
-              </div>
-            </div>
+            <p style={{ fontSize: 13, color: COLOR.text, margin: "0 0 16px", lineHeight: 1.5 }}>
+              A home for your assets — holds funds, positions, and the key that authorizes your bot.
+            </p>
+            <p style={{ fontSize: 13, color: COLOR.text, margin: "0 0 24px", lineHeight: 1.5 }}>
+              No new password — connect the wallet you already use.
+            </p>
             <button className="sooth-focusable" style={{ width: "100%", padding: "11px 0", fontSize: 14, background: COLOR.accent, color: COLOR.ink, border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
               Get a wallet
             </button>

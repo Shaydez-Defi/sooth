@@ -62,9 +62,11 @@ describe("API routes - shape, tags, validation", () => {
   it("GET /markets - LIVE_INDEXER tag and array", async () => {
     const res = await server.inject({ method: "GET", url: "/markets" });
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { data: unknown[]; dataIntegrity: string };
+    const body = JSON.parse(res.body) as { data: unknown[]; dataIntegrity: string; cacheAgeSec: number; stale: boolean };
     expect(Array.isArray(body.data)).toBe(true);
     expect(body.dataIntegrity).toBe("LIVE_INDEXER");
+    expect(body.stale).toBe(false);
+    expect(body.cacheAgeSec).toBeGreaterThanOrEqual(0);
   });
 
   it("GET /markets/:id/orderbook - validation for depth", async () => {
@@ -117,8 +119,10 @@ describe("API routes - shape, tags, validation", () => {
   it("POST /strategies/analyze - validation and DERIVED tag", async () => {
     const res = await server.inject({ method: "POST", url: "/strategies/analyze", payload: { all: true } });
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { data: unknown[]; dataIntegrity: string };
+    const body = JSON.parse(res.body) as { data: unknown[]; dataIntegrity: string; cacheAgeSec: number; stale: boolean };
     expect(Array.isArray(body.data)).toBe(true);
+    expect(body.stale).toBe(false);
+    expect(body.cacheAgeSec).toBeGreaterThanOrEqual(0);
   });
 
   it("GET /bots - single-bot id default", async () => {

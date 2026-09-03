@@ -23,6 +23,7 @@
     "settle": "tsx src/scripts/settlement-poller.ts",
     "stage9:verify": "tsx src/scripts/stage9-verify.ts",
     "api": "tsx src/api/server.ts",
+    "bundle:api": "esbuild api/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=api/index.js --external:@fastify/cors --external:@somnia-chain/markets-sdk --external:@vercel/kv --external:better-sqlite3 --external:dotenv --external:fastify --external:viem --external:ws --log-level=warning",
     "strategy:dry-run": "tsx src/scripts/strategy-dry-run.ts",
     "bot:smoke": "tsx src/scripts/bot-smoke.ts",
     "test": "vitest run"
@@ -32,6 +33,7 @@
     "@dreamdex-bot-kit/ec-core": "file:vendor/dreamdex-bot-kit/packages/ec-core",
     "@fastify/cors": "^9.0.1",
     "@somnia-chain/markets-sdk": "^0.28.1",
+    "@vercel/kv": "^3.0.0",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
@@ -44,6 +46,7 @@
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.0",

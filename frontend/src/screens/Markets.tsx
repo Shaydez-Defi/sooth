@@ -207,6 +207,7 @@ export default function SoothMarkets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analysisWarning, setAnalysisWarning] = useState<string | null>(null);
+  const [cacheNote, setCacheNote] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusTab, setStatusTab] = useState<StatusTab>("All");
   const [sortKey, setSortKey] = useState<(typeof COLUMNS)[number]["key"]>("edge");
@@ -219,6 +220,7 @@ export default function SoothMarkets() {
     setLoading(true);
     setError(null);
     setAnalysisWarning(null);
+    setCacheNote(null);
     try {
       const [marketsRes, analyzeOutcome] = await Promise.all([
         getMarkets().catch(() => null),
@@ -258,6 +260,9 @@ export default function SoothMarkets() {
           });
           setRows(fallback);
           setAnalysisWarning(msg);
+          if (marketsRes.stale) {
+            setCacheNote(`Market list cached (updated ${marketsRes.cacheAgeSec ?? 0}s ago) - retry for live.`);
+          }
           return;
         }
         throw analyzeOutcome.err;
@@ -309,6 +314,10 @@ export default function SoothMarkets() {
         console.warn(`[Markets] ${broken.length} market(s) fell back to raw symbol - fields missing or unparsable:`, broken.map((b) => b.rawSymbol));
       }
       setRows(enriched);
+      if (analyzeRes.stale === true || marketsRes?.stale === true) {
+        const age = Math.max(analyzeRes.cacheAgeSec ?? 0, marketsRes?.cacheAgeSec ?? 0);
+        setCacheNote(`Showing cached data (updated ${age}s ago) - retry for live.`);
+      }
     } catch (err) {
       const msg = err instanceof ApiError ? `${err.message} (${err.status})` : (err as Error).message;
       setError(msg);
@@ -402,6 +411,12 @@ export default function SoothMarkets() {
               </div>
             )}
             <button onClick={() => void load()} style={{ marginTop: 8, background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>retry</button>
+          </div>
+        )}
+        {cacheNote && !error && (
+          <div style={{ marginTop: 12, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "10px 12px", background: COLOR.surface2, fontSize: 12, color: COLOR.muted, fontFamily: "monospace", lineHeight: 1.5 }}>
+            <span>{cacheNote}</span>
+            <button onClick={() => void load()} style={{ marginLeft: 8, background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>retry</button>
           </div>
         )}
         {analysisWarning && !error && (

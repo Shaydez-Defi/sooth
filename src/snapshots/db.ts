@@ -42,9 +42,13 @@ export interface InsertSnapshotParams {
 
 /**
  * Open (or create) the snapshot DB, ensuring directory exists.
+ * Serverless note: the platform filesystem is read-only except /tmp, so deployments
+ * point SNAPSHOT_DB_PATH at /tmp and start empty. To avoid that, a bundled seed copy
+ * (data/seed-snapshots.db, committed) is copied in when the target is missing.
  * Caller is responsible for closing (db.close()) on shutdown.
  */
 export function openSnapshotDb(dbPath: string = SNAPSHOT_CONFIG.DB_PATH): Database.Database {
+  seedDbIfMissing(dbPath);
   const dir = path.dirname(dbPath);
   if (dir !== "." && dir !== "") {
     fs.mkdirSync(dir, { recursive: true });
@@ -57,8 +61,31 @@ export function openSnapshotDb(dbPath: string = SNAPSHOT_CONFIG.DB_PATH): Databa
   return db;
 }
 
-/** Create table + indexes if not exists. Idempotent. Reuses same DB file for bot tables (events/fills/positions/config). */
-export function initDb(db: Database.Database): void {
+const SEED_DB_PATH = "data/seed-snapshots.db";
+
+/**
+ * Copy the bundled seed DB to dbPath when the target is missing (serverless cold
+ * start). Never overwrites an existing DB. Failures fall through to a fresh DB
+ * rather than failing the open.
+ */
+export function seedDbIfMissing(dbPath: string): void {
+  if (dbPath === ":memory:" || dbPath === "") return;
+  if (fs.existsSync(dbPath)) return;
+  const seed = path.resolve(SEED_DB_PATH);
+  if (path.resolve(dbPath) === seed) return;
+  if (!fs.existsSync(seed)) return;
+  try {
+    const dir = path.dirname(dbPath);
+    if (dir !== "." && dir !== "") {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.copyFileSync(seed, dbPath);
+  } catch (err) {
+    console.warn(`[snapshots] seed copy failed, starting fresh DB: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** Create table + indexes if not exists. Idempotent. Reuses same DB file for bot tables (events/fills/positions/config). */export function initDb(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -5,12 +5,15 @@ import { formatSymbolFallback } from "../lib/formatMarket";
 import { COLOR } from "../components/theme";
 import { PanelHeader } from "../components/PanelHeader";
 import { ProvenanceTag } from "../components/ProvenanceTag";
+import { useWallet } from "../lib/useWallet";
+import { shortAddress } from "../lib/somnia-chain";
 
 function money(v: number, opts: { signed?: boolean } = {}): string {
   const sign = v < 0 ? "-" : opts.signed && v > 0 ? "+" : "";
   return `${sign}$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 export default function Portfolio() {
+  const { address } = useWallet();
   const [portfolio, setPortfolio] = useState<PortfolioResponse["data"] | null>(null);
   const [positions, setPositions] = useState<Awaited<ReturnType<typeof getPositions>>["data"]["positions"]>([]);
   const [performance, setPerformance] = useState<Awaited<ReturnType<typeof getBotPerformance>>["data"] | null>(null);
@@ -73,7 +76,7 @@ export default function Portfolio() {
   }
   if (!portfolio) return null;
 
-  const walletShort = "0x…";
+  const walletShort = address ? shortAddress(address) : "Not connected";
   const hasChartData = chartData.length >= 2;
 
   return (
@@ -100,7 +103,7 @@ export default function Portfolio() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "7px 10px" }}>
             <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>{walletShort}</span>
-            <ProvenanceTag tag="LIVE_ONCHAIN" small />
+            {address && <ProvenanceTag tag="LIVE_ONCHAIN" small />}
           </div>
         </div>
 

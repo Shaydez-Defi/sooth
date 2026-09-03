@@ -1,0 +1,9 @@
+frontend/dist
+frontend/node_modules
+api/index.ts
+dist
+logs
+*.log
+coverage
+.vscode
+data/snapshots.db*

@@ -85,6 +85,8 @@ export interface MarketsResponse {
   data: MarketSummary[];
   dataIntegrity: DataIntegrityTag;
   count: number;
+  cacheAgeSec?: number;
+  stale?: boolean;
 }
 
 export function getMarkets(): Promise<MarketsResponse> {
@@ -167,6 +169,8 @@ export interface AnalyzeResponse {
   data: Array<{ marketId: string; symbol: string; analysis: MarketAnalysis; dataIntegrity: unknown }>;
   dataIntegrity: DataIntegrityTag;
   count: number;
+  cacheAgeSec?: number;
+  stale?: boolean;
 }
 export function postAnalyze(body: AnalyzeRequest): Promise<AnalyzeResponse> {
   return apiFetch<AnalyzeResponse>("/strategies/analyze", { method: "POST", body: JSON.stringify(body) });

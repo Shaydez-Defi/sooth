@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-base-to-string */
 import type { FastifyInstance } from "fastify";
-import { createExchange, activeMarkets, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
+import { createExchange, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
+import { getActiveMarketsCached } from "../registryCache.js";
 import { analyzeMarket } from "../../analysis/engine.js";
 import { runBacktest, type SettledMarket } from "../../backtest/engine.js";
 import { ANALYSIS_CONFIG } from "../../config.js";
@@ -15,7 +16,7 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = createExchange({ withSigner: false });
-      const markets = await activeMarkets(ctx);
+      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached(ctx);
       let targets = markets;
       if (!wantAll) {
         const identifier = typeof marketId === "string" && String(marketId).trim() !== "" ? String(marketId).trim() : String(symbol ?? "").trim();
@@ -57,7 +58,7 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
         results.push({ marketId: String(info.marketId), symbol: m.symbol, analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } as const });
       }
       await ctx.exchange.close().catch(() => undefined);
-      return reply.send({ data: results, dataIntegrity: "DERIVED on LIVE_INDEXER/LIVE_ONCHAIN" as const, count: results.length });
+      return reply.send({ data: results, dataIntegrity: "DERIVED on LIVE_INDEXER/LIVE_ONCHAIN" as const, count: results.length, cacheAgeSec, stale });
     } catch (err) {
       return reply.status(500).send({ error: `POST /strategies/analyze failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });
     }

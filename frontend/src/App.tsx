@@ -3,6 +3,9 @@ import { useState } from "react";
 import { COLOR } from "./components/theme";
 import { OrbMark } from "./components/OrbMark";
 import { ConnectWalletModal } from "./components/ConnectWalletModal";
+import { WalletProvider } from "./lib/wallet";
+import { useWallet } from "./lib/useWallet";
+import { shortAddress } from "./lib/somnia-chain";
 import Landing from "./screens/Landing";
 import Markets from "./screens/Markets";
 import MarketDetail from "./screens/MarketDetail";
@@ -12,6 +15,7 @@ import Bots from "./screens/Bots";
 
 function TopNav() {
   const [walletOpen, setWalletOpen] = useState(false);
+  const { address } = useWallet();
   const location = useLocation();
   const isLanding = location.pathname === "/";
   if (isLanding) return null;
@@ -36,8 +40,8 @@ function TopNav() {
           <NavLink to="/portfolio" style={({ isActive }) => activeStyle(isActive)}>Portfolio</NavLink>
           <NavLink to="/bots" style={({ isActive }) => activeStyle(isActive)}>Bots</NavLink>
         </div>
-        <button onClick={() => setWalletOpen(true)} style={{ background: COLOR.accent, color: COLOR.ink, border: "none", borderRadius: 6, padding: "8px 14px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>
-          Connect wallet
+        <button onClick={() => setWalletOpen(true)} style={{ background: address ? COLOR.surface2 : COLOR.accent, color: address ? COLOR.text : COLOR.ink, border: address ? `1px solid ${COLOR.border}` : "none", borderRadius: 6, padding: "8px 14px", fontWeight: 600, cursor: "pointer", fontFamily: address ? "monospace" : "inherit", fontSize: 13 }}>
+          {address ? shortAddress(address) : "Connect wallet"}
         </button>
       </nav>
       <ConnectWalletModal open={walletOpen} onClose={() => setWalletOpen(false)} />
@@ -48,6 +52,7 @@ function TopNav() {
 export default function App() {
   return (
     <BrowserRouter>
+      <WalletProvider>
       <TopNav />
       <Routes>
         <Route path="/" element={<Landing />} />
@@ -58,6 +63,7 @@ export default function App() {
         <Route path="/bots" element={<Bots />} />
         <Route path="*" element={<div style={{ background: COLOR.ink, color: COLOR.text, minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}><p>Not found</p><Link to="/markets" style={{ color: COLOR.accent }}>Go to markets</Link></div>} />
       </Routes>
+      </WalletProvider>
     </BrowserRouter>
   );
 }

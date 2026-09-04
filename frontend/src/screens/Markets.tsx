@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ChevronRight, ChevronUp, ChevronDown, Info, TrendingUp } from "lucide-react";
+import { Search, ChevronRight, ChevronUp, ChevronDown, Info } from "lucide-react";
 import { ApiError, postAnalyze, getMarkets, type MarketAnalysis } from "../lib/api";
 import { formatMarket } from "../lib/formatMarket";
 
@@ -138,11 +138,15 @@ function SignalSummary({ markets }: { markets: EnrichedRow[] }) {
     if (tradeable.length === 0) return null;
     return tradeable.reduce((a, b) => (Math.abs(b.edge) > Math.abs(a.edge) ? b : a));
   }, [markets]);
+  const closest = useMemo(() => {
+    const scored = markets.filter((m) => !m.analysisUnavailable && Number.isFinite(m.edge));
+    if (scored.length === 0) return null;
+    return scored.reduce((a, b) => (Math.abs(b.edge) > Math.abs(a.edge) ? b : a));
+  }, [markets]);
   return (
     <div style={{ border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <TrendingUp size={14} color={COLOR.accent} />
-        <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Strongest signal</span>
+        <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>{best ? "Strongest signal" : "Closest signal"}</span>
       </div>
       {best ? (
         <>
@@ -154,8 +158,17 @@ function SignalSummary({ markets }: { markets: EnrichedRow[] }) {
           </div>
           <p style={{ fontSize: 12, color: COLOR.muted, marginTop: 10, lineHeight: 1.5 }}>Cleared the {(Math.abs(best.edge) * 100).toFixed(0)}% edge threshold with liquidity and spread within range - the strongest qualifying signal right now.</p>
         </>
+      ) : closest ? (
+        <>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, lineHeight: 1.4 }}>{closest.label}</p>
+          <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+            <div><div style={{ fontSize: 11, color: COLOR.faint }}>Edge</div><div style={{ fontFamily: "monospace", fontSize: 15, color: closest.edge >= 0 ? COLOR.up : COLOR.down }}>{closest.edge >= 0 ? "+" : ""}{(closest.edge * 100).toFixed(1)}%</div></div>
+            <div><div style={{ fontSize: 11, color: COLOR.faint }}>Needed</div><div style={{ fontFamily: "monospace", fontSize: 15, color: COLOR.muted }}>+{(MIN_EDGE * 100).toFixed(1)}%</div></div>
+          </div>
+          <p style={{ fontSize: 12, color: COLOR.muted, marginTop: 10, lineHeight: 1.5 }}>{markets.length} scanned, 0 clear. Needs edge plus depth and spread in range.</p>
+        </>
       ) : (
-        <p style={{ fontSize: 13, color: COLOR.faint, margin: 0 }}>No market clears the trade threshold right now. That&apos;s a legitimate result, not a gap.</p>
+        <p style={{ fontSize: 13, color: COLOR.faint, margin: 0 }}>No markets loaded.</p>
       )}
     </div>
   );
@@ -163,7 +176,56 @@ function SignalSummary({ markets }: { markets: EnrichedRow[] }) {
 
 // Original ACTIVITY shape preserved verbatim - data now populated from live API where available,
 // but markup/spacing/colors identical to sooth-markets-v3.jsx
-function ActivityFeed({ rows }: { rows: Array<{ type: "fill" | "signal" | "settle"; text: string; tx?: string; provenance: string; time: string }> }) {
+function EdgeLandscape({ markets }: { markets: EnrichedRow[] }) {
+  const scored = markets.filter((m) => !m.analysisUnavailable && Number.isFinite(m.edge));
+  const peak = Math.max(...scored.map((m) => Math.abs(m.edge)), 0.001);
+  const ordered = [...scored].sort((a, b) => b.edge - a.edge);
+  return (
+    <div style={{ border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Edge landscape</span>
+        <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>{scored.length} scored</span>
+      </div>
+      {ordered.length === 0 ? (
+        <p style={{ fontSize: 12, color: COLOR.faint, margin: 0 }}>No scored markets.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          {ordered.map((m) => {
+            const widthPct = Math.max(2, (Math.abs(m.edge) / peak) * 50);
+            const positive = m.edge >= 0;
+            const barColor = positive ? COLOR.accent : COLOR.faint;
+            return (
+              <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1fr 120px auto", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 11, fontFamily: "monospace", color: COLOR.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={m.tooltip}>
+                  {m.label}
+                </span>
+                <span style={{ position: "relative", height: 8, background: COLOR.surface2, borderRadius: 2, overflow: "hidden" }}>
+                  <span style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: COLOR.border }} />
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      bottom: 0,
+                      ...(positive ? { left: "50%", width: `${widthPct}%` } : { right: "50%", width: `${widthPct}%` }),
+                      background: barColor,
+                      borderRadius: 2,
+                      opacity: 0.85,
+                    }}
+                  />
+                </span>
+                <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.muted, minWidth: 52, textAlign: "right" }}>
+                  {positive ? "+" : ""}{(m.edge * 100).toFixed(1)}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActivityFeed({ rows, scanned, trade, wait, no }: { rows: Array<{ type: "fill" | "signal" | "settle"; text: string; tx?: string; provenance: string; time: string }>; scanned: number; trade: number; wait: number; no: number }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const dotFor = (t: string): string => (t === "fill" ? COLOR.up : t === "settle" ? COLOR.faint : COLOR.accent);
   if (rows.length === 0) {
@@ -173,7 +235,23 @@ function ActivityFeed({ rows }: { rows: Array<{ type: "fill" | "signal" | "settl
           <span className="sooth-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLOR.up, display: "inline-block" }} />
           <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Live activity</span>
         </div>
-        <p style={{ fontSize: 12, color: COLOR.faint, margin: 0 }}>No recent activity - trades and signals will appear here.</p>
+        <div style={{ display: "flex", gap: 10, padding: "9px 8px", marginLeft: -8, marginRight: -8, borderRadius: 6, background: COLOR.surface2, marginBottom: 8 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: COLOR.accent, flexShrink: 0, marginTop: 7, opacity: 0.9 }} aria-hidden="true" />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, fontFamily: "monospace", color: COLOR.text }}>
+              scan <span style={{ color: COLOR.muted, fontFamily: "inherit" }}>- {scanned} markets · {trade} TRADE · {wait} WAIT · {no} NO</span>
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+              <span style={{ fontFamily: "monospace", fontSize: 10.5, color: COLOR.faint }}>this load</span>
+              <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>DERIVED</span>
+            </div>
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: COLOR.faint, margin: 0 }}>
+          {scanned > 0
+            ? `Signals post here when edge clears ${(MIN_EDGE * 100).toFixed(1)}%.`
+            : "Nothing scanned yet."}
+        </p>
       </div>
     );
   }
@@ -182,6 +260,18 @@ function ActivityFeed({ rows }: { rows: Array<{ type: "fill" | "signal" | "settl
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <span className="sooth-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLOR.up, display: "inline-block" }} />
         <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Live activity</span>
+      </div>
+      <div style={{ display: "flex", gap: 10, padding: "9px 8px", marginLeft: -8, marginRight: -8, borderRadius: 6, background: COLOR.surface2, marginBottom: 4 }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: COLOR.accent, flexShrink: 0, marginTop: 7, opacity: 0.9 }} aria-hidden="true" />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, fontFamily: "monospace", color: COLOR.text }}>
+            scan <span style={{ color: COLOR.muted, fontFamily: "inherit" }}>- {scanned} markets · {trade} TRADE · {wait} WAIT · {no} NO</span>
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+            <span style={{ fontFamily: "monospace", fontSize: 10.5, color: COLOR.faint }}>this load</span>
+            <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>DERIVED</span>
+          </div>
+        </div>
       </div>
       <div>
         {rows.map((a, i) => (
@@ -517,7 +607,8 @@ export default function SoothMarkets() {
           </div>
           <div>
             <SignalSummary markets={rows} />
-            <ActivityFeed rows={activityRows} />
+            <EdgeLandscape markets={rows} />
+            <ActivityFeed rows={activityRows} scanned={rows.length} trade={tradeCount} wait={waitCount} no={noCount} />
           </div>
         </div>
       </div>

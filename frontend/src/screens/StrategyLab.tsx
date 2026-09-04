@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import { Play } from "lucide-react";
 import { ApiError, postAnalyze, postBacktest, getMarkets, type MarketAnalysis, type BacktestMetrics } from "../lib/api";
+import type { EChartsCoreOption } from "echarts/core";
+import { EChart } from "../components/EChart";
+import { ECHARTS_MONO, AXIS_COMMON, areaGradient, tooltipBox } from "../components/chartTheme";
+import { EmptyState } from "../components/EmptyState";
 
 // Preserved verbatim from sooth-strategy-lab.jsx - inline duplication flagged as follow-up
 const COLOR = {
@@ -97,27 +100,82 @@ function EquityCurveChart({ startingCapital, trades }: { startingCapital: number
     return points;
   })();
   const totalReturn = trades.length > 0 ? ((equityCurve[equityCurve.length - 1].equity - startingCapital) / startingCapital) * 100 : 0;
+  const minEquity = Math.min(...equityCurve.map((p) => p.equity));
+  const maxEquity = Math.max(...equityCurve.map((p) => p.equity));
+  const option: EChartsCoreOption = {
+    grid: { left: 52, right: 12, top: 12, bottom: 26 },
+    xAxis: {
+      type: "category",
+      data: equityCurve.map((p) => `#${p.trade}`),
+      boundaryGap: false,
+      axisLine: AXIS_COMMON.axisLine,
+      axisTick: AXIS_COMMON.axisTick,
+      axisLabel: AXIS_COMMON.axisLabel,
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      scale: true,
+      axisLine: { show: false },
+      axisTick: AXIS_COMMON.axisTick,
+      axisLabel: { ...AXIS_COMMON.axisLabel, formatter: (v: number) => `$${Math.round(v)}` },
+      splitLine: AXIS_COMMON.splitLine,
+    },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      padding: 0,
+      axisPointer: { type: "cross", lineStyle: { color: COLOR.accent, type: "dashed", width: 1 } },
+      formatter: (params: unknown) => {
+        const list = Array.isArray(params) ? params : [params];
+        const item = list[0] as { value?: unknown; name?: unknown } | undefined;
+        const v = item?.value;
+        if (typeof v !== "number") return "";
+        const up = v >= startingCapital;
+        return tooltipBox(`Trade ${String(item?.name ?? "")}`, [["Equity", `$${v.toFixed(2)}`, up ? COLOR.up : COLOR.down]]);
+      },
+    },
+    dataZoom: [{ type: "inside", xAxisIndex: [0], filterMode: "filter" }],
+    series: [
+      {
+        name: "Equity",
+        type: "line",
+        data: equityCurve.map((p) => p.equity),
+        showSymbol: false,
+        smooth: true,
+        lineStyle: { width: 2, color: COLOR.accent },
+        areaStyle: { color: areaGradient(COLOR.accent, 0.22) },
+        emphasis: { focus: "series" },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: COLOR.faint, type: "dashed", width: 1 },
+          label: { formatter: "start", color: COLOR.faint, fontFamily: ECHARTS_MONO, fontSize: 10 },
+          data: [{ yAxis: startingCapital }],
+        },
+        markPoint: {
+          symbol: "circle",
+          symbolSize: 7,
+          itemStyle: { borderColor: COLOR.ink, borderWidth: 2 },
+          label: { show: false },
+          data: [
+            { name: "max", coord: [maxEquity === minEquity ? 0 : equityCurve.findIndex((p) => p.equity === maxEquity), maxEquity], itemStyle: { color: COLOR.up } },
+            { name: "min", coord: [equityCurve.findIndex((p) => p.equity === minEquity), minEquity], itemStyle: { color: COLOR.down } },
+          ],
+        },
+      },
+    ],
+  };
   return (
     <div className="sooth-glass-card" style={{ marginTop: SPACE.panel }}>
       <PanelHeader right={<span style={{ fontFamily: "monospace", fontSize: 13, color: totalReturn >= 0 ? COLOR.up : COLOR.down }}>{totalReturn >= 0 ? "+" : ""}{totalReturn.toFixed(1)}%</span>}>Equity curve</PanelHeader>
       {trades.length === 0 ? (
-        <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: COLOR.faint, fontSize: 13, border: `1px dashed ${COLOR.border}`, borderRadius: 8 }}>Run a backtest to see equity curve.</div>
+        <EmptyState mark="$" title="No curve yet" height={200}>
+          Run a backtest to see equity curve. <span style={{ fontFamily: "monospace" }}>DERIVED</span>
+        </EmptyState>
       ) : (
-        <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={equityCurve} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-            <defs>
-              <linearGradient id="sooth-equity-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={COLOR.accent} stopOpacity={0.22} />
-                <stop offset="100%" stopColor={COLOR.accent} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={COLOR.border} vertical={false} />
-            <XAxis dataKey="trade" stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={{ stroke: COLOR.border }} tickLine={false} />
-            <YAxis stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => `$${v}`} />
-            <Tooltip contentStyle={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 6, fontSize: 12 }} labelFormatter={(value) => `Trade #${String(value)}`} formatter={(value) => [`$${String(value)}`, "Equity"] as [string, string]} cursor={{ stroke: COLOR.accent, strokeWidth: 1, strokeDasharray: "3 3" }} />
-            <Area type="monotone" dataKey="equity" stroke={COLOR.accent} strokeWidth={2} fill="url(#sooth-equity-fill)" activeDot={{ r: 5, fill: COLOR.accent, stroke: COLOR.ink, strokeWidth: 2 }} />
-          </AreaChart>
-        </ResponsiveContainer>
+        <EChart option={option} height={200} label={`Equity curve over ${trades.length} trades`} />
       )}
     </div>
   );
@@ -126,27 +184,64 @@ function EquityCurveChart({ startingCapital, trades }: { startingCapital: number
 function EdgeBreakdownChart({ trades }: { trades: Array<{ won: boolean }> }) {
   const wins = trades.filter((t) => t.won).length;
   const losses = trades.length - wins;
-  const data = trades.length === 0 ? [] : [
-    { name: "Wins", value: wins, color: COLOR.up },
-    { name: "Losses", value: losses, color: COLOR.down },
-  ];
+  const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
+  const option: EChartsCoreOption = {
+    title: {
+      text: `${winRate.toFixed(0)}%`,
+      subtext: "win rate",
+      left: "center",
+      top: "30%",
+      textStyle: { color: COLOR.text, fontSize: 22, fontWeight: 700, fontFamily: ECHARTS_MONO },
+      subtextStyle: { color: COLOR.faint, fontSize: 10, fontFamily: ECHARTS_MONO },
+      itemGap: 2,
+    },
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      padding: 0,
+      formatter: (params: unknown) => {
+        const item = (Array.isArray(params) ? params[0] : params) as { name?: unknown; value?: unknown } | undefined;
+        const v = item?.value;
+        if (typeof v !== "number") return "";
+        const col = item?.name === "Wins" ? COLOR.up : COLOR.down;
+        return tooltipBox("Signal breakdown", [[String(item?.name ?? ""), String(v), col]]);
+      },
+    },
+    series: [
+      {
+        name: "Signal breakdown",
+        type: "pie",
+        radius: ["62%", "82%"],
+        center: ["50%", "50%"],
+        avoidLabelOverlap: true,
+        itemStyle: { borderRadius: 5, borderColor: COLOR.ink, borderWidth: 2 },
+        label: { show: false },
+        emphasis: { scale: true, scaleSize: 4 },
+        data: [
+          { name: "Wins", value: wins, itemStyle: { color: COLOR.up } },
+          { name: "Losses", value: losses, itemStyle: { color: COLOR.down } },
+        ],
+      },
+    ],
+  };
   return (
     <div className="sooth-glass-card" style={{ marginTop: SPACE.panel }}>
       <PanelHeader>Signal breakdown</PanelHeader>
-      {data.length === 0 ? (
-        <div style={{ color: COLOR.faint, fontSize: 13 }}>No trades yet.</div>
+      {trades.length === 0 ? (
+        <EmptyState mark="%" title="No trades yet" height={180}>
+          Run a backtest first. Wins and losses land here. <span style={{ fontFamily: "monospace" }}>DERIVED</span>
+        </EmptyState>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <ResponsiveContainer width={140} height={140}>
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" innerRadius={44} outerRadius={64} paddingAngle={2} stroke="none">
-                {data.map((d) => <Cell key={d.name} fill={d.color} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 6, fontSize: 12 }} formatter={(value, name) => [`${String(value)}`, String(name)] as [string, string]} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div style={{ width: 180 }}>
+            <EChart option={option} height={180} label={`Win rate ${winRate.toFixed(0)} percent over ${trades.length} trades`} />
+          </div>
           <div>
-            {data.map((d) => (
+            {[
+              { name: "Wins", value: wins, color: COLOR.up },
+              { name: "Losses", value: losses, color: COLOR.down },
+            ].map((d) => (
               <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: d.color, display: "inline-block" }} />
                 <span style={{ fontSize: 13, color: COLOR.muted, width: 80 }}>{d.name}</span>

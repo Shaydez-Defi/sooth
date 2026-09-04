@@ -1,9 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
-import { ChevronDown, CheckCircle2, XCircle, Activity } from "lucide-react";
+import { ChevronDown, CheckCircle2, XCircle } from "lucide-react";
 import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, getMarketById, type MarketAnalysis } from "../lib/api";
 import { formatMarket, formatSymbolFallback } from "../lib/formatMarket";
+import type { EChartsCoreOption } from "echarts/core";
+import { EChart } from "../components/EChart";
+import { ECHARTS_MONO, AXIS_COMMON, areaGradient, tooltipBox, hexToRgba } from "../components/chartTheme";
+import { EmptyState } from "../components/EmptyState";
 
 // Preserved verbatim from sooth-market-detail-v3.jsx - inline, not unified
 const COLOR = {
@@ -108,8 +111,122 @@ function ReasoningTrace({ analysis }: { analysis: MarketAnalysis }) {
   );
 }
 
+function compactQty(v: number): string {
+  if (!Number.isFinite(v)) return "-";
+  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}k`;
+  return `${Math.round(v)}`;
+}
+
 function DepthChart({ bids, asks }: { bids: [number, number][]; asks: [number, number][] }) {
-  const maxDepth = Math.max(...bids.map((b) => b[1]), ...asks.map((a) => a[1]), 1);
+  const sortedBids = useMemo(() => [...bids].sort((a, b) => b[0] - a[0]), [bids]);
+  const sortedAsks = useMemo(() => [...asks].sort((a, b) => a[0] - b[0]), [asks]);
+
+  const bestBid = sortedBids.length > 0 ? sortedBids[0][0] : null;
+  const bestAsk = sortedAsks.length > 0 ? sortedAsks[0][0] : null;
+  const mid = bestBid !== null && bestAsk !== null ? (bestBid + bestAsk) / 2 : null;
+  const spread = bestBid !== null && bestAsk !== null ? bestAsk - bestBid : null;
+  const spreadBps = spread !== null && mid ? (spread / mid) * 10000 : null;
+
+  const bidRows = useMemo(
+    () =>
+      sortedBids.map(([p, q], i) => ({
+        p,
+        q,
+        cum: sortedBids.slice(0, i + 1).reduce((s, b) => s + b[1], 0),
+      })),
+    [sortedBids],
+  );
+  const askRows = useMemo(
+    () =>
+      sortedAsks.map(([p, q], i) => ({
+        p,
+        q,
+        cum: sortedAsks.slice(0, i + 1).reduce((s, a) => s + a[1], 0),
+      })),
+    [sortedAsks],
+  );
+
+  const option: EChartsCoreOption = useMemo(() => {
+    const bidLine = [...bidRows].reverse().map((r) => [r.p, r.cum] as [number, number]);
+    const askLine = askRows.map((r) => [r.p, r.cum] as [number, number]);
+    return {
+      grid: { left: 50, right: 12, top: 12, bottom: 26 },
+      xAxis: {
+        type: "value",
+        axisLine: AXIS_COMMON.axisLine,
+        axisTick: AXIS_COMMON.axisTick,
+        axisLabel: { ...AXIS_COMMON.axisLabel, formatter: (v: number) => pct(v) },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: AXIS_COMMON.axisTick,
+        axisLabel: { ...AXIS_COMMON.axisLabel, formatter: (v: number) => compactQty(v) },
+        splitLine: AXIS_COMMON.splitLine,
+      },
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: "transparent",
+        borderWidth: 0,
+        padding: 0,
+        axisPointer: { type: "cross", lineStyle: { color: COLOR.accent, type: "dashed", width: 1 } },
+        formatter: (params: unknown) => {
+          const list = (Array.isArray(params) ? params : [params]) as Array<{ seriesName?: unknown; value?: unknown; color?: unknown }>;
+          const first = list[0]?.value;
+          const price = Array.isArray(first) && typeof first[0] === "number" ? first[0] : null;
+          const rows = list
+            .filter((s) => Array.isArray(s.value) && typeof (s.value as unknown[])[1] === "number")
+            .map((s) => {
+              const v = (s.value as unknown[])[1] as number;
+              const col = typeof s.color === "string" ? s.color : COLOR.muted;
+              return [String(s.seriesName ?? ""), compactQty(v), col] as const;
+            });
+          return tooltipBox(price !== null ? pct(price) : "depth", rows);
+        },
+      },
+      series: [
+        {
+          name: "Bid depth",
+          type: "line",
+          step: "start",
+          data: bidLine,
+          showSymbol: false,
+          lineStyle: { width: 2, color: COLOR.up },
+          areaStyle: { color: areaGradient(COLOR.up, 0.18) },
+          emphasis: { focus: "series" },
+        },
+        {
+          name: "Ask depth",
+          type: "line",
+          step: "end",
+          data: askLine,
+          showSymbol: false,
+          lineStyle: { width: 2, color: COLOR.down },
+          areaStyle: { color: areaGradient(COLOR.down, 0.18) },
+          emphasis: { focus: "series" },
+          markLine:
+            mid !== null
+              ? {
+                  silent: true,
+                  symbol: "none",
+                  lineStyle: { color: COLOR.accent, type: "dashed", width: 1 },
+                  label: { formatter: `mid ${pct(mid)}`, color: COLOR.accent, fontFamily: ECHARTS_MONO, fontSize: 10 },
+                  data: [{ xAxis: mid }],
+                }
+              : undefined,
+          markArea:
+            bestBid !== null && bestAsk !== null
+              ? {
+                  silent: true,
+                  itemStyle: { color: hexToRgba(COLOR.faint, 0.08) },
+                  data: [[{ xAxis: bestBid }, { xAxis: bestAsk }]],
+                }
+              : undefined,
+        },
+      ],
+    };
+  }, [bidRows, askRows, mid, bestBid, bestAsk]);
   const emptyBoxStyle: React.CSSProperties = {
     border: `1px dashed ${COLOR.border}`,
     borderRadius: 6,
@@ -125,37 +242,81 @@ function DepthChart({ bids, asks }: { bids: [number, number][]; asks: [number, n
   return (
     <div className="sooth-glass-card">
       <PanelHeader>Order book depth</PanelHeader>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
         <div>
-          <div style={{ fontSize: 11, color: COLOR.up, marginBottom: 6, fontFamily: "monospace" }}>BIDS</div>
-          {bids.length === 0 ? (
+          <div style={PANEL_LABEL}>Best bid</div>
+          <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, marginTop: 2, color: bestBid !== null ? COLOR.up : COLOR.faint }}>
+            {bestBid !== null ? pct(bestBid) : "-"}
+          </div>
+        </div>
+        <div>
+          <div style={PANEL_LABEL}>Spread</div>
+          <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, marginTop: 2, color: spreadBps !== null ? COLOR.text : COLOR.faint }}>
+            {spreadBps !== null ? `${spreadBps.toFixed(0)} bps` : "-"}
+          </div>
+        </div>
+        <div>
+          <div style={PANEL_LABEL}>Best ask</div>
+          <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, marginTop: 2, color: bestAsk !== null ? COLOR.down : COLOR.faint }}>
+            {bestAsk !== null ? pct(bestAsk) : "-"}
+          </div>
+        </div>
+        <div>
+          <div style={PANEL_LABEL}>Mid</div>
+          <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, marginTop: 2, color: mid !== null ? COLOR.accent : COLOR.faint }}>
+            {mid !== null ? pct(mid) : "-"}
+          </div>
+        </div>
+      </div>
+      {bidRows.length === 0 && askRows.length === 0 ? (
+        <div style={emptyBoxStyle}>
+          <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>No book</span>
+          <span style={{ fontSize: 11, color: COLOR.faint }}>Waiting for live book</span>
+        </div>
+      ) : (
+        <EChart option={option} height={220} label="Cumulative order book depth with mid price marker" />
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", fontSize: 10, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase", padding: "0 8px", marginBottom: 4 }}>
+            <span style={{ color: COLOR.up }}>Bids</span>
+            <span style={{ textAlign: "right" }}>Qty</span>
+            <span style={{ textAlign: "right" }}>Cum</span>
+          </div>
+          {bidRows.length === 0 ? (
             <div style={emptyBoxStyle}>
               <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>No bids</span>
               <span style={{ fontSize: 11, color: COLOR.faint }}>Waiting for live book</span>
             </div>
           ) : (
-            bids.map((b) => (
-              <div key={b[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
-                <div style={{ position: "absolute", inset: 0, background: COLOR.up, opacity: 0.1, width: `${(b[1] / maxDepth) * 100}%`, right: "auto" }} />
-                <span style={{ position: "relative", color: COLOR.up }}>{pct(b[0])}</span>
-                <span style={{ position: "relative", color: COLOR.muted }}>{b[1].toLocaleString()}</span>
+            bidRows.map((b) => (
+              <div key={b.p} style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
+                <div style={{ position: "absolute", inset: 0, background: COLOR.up, opacity: 0.1, width: `${(b.cum / Math.max(bidRows[bidRows.length - 1].cum, 1)) * 100}%`, right: "auto" }} />
+                <span style={{ position: "relative", color: COLOR.up }}>{pct(b.p)}</span>
+                <span style={{ position: "relative", color: COLOR.muted, textAlign: "right" }}>{b.q.toLocaleString()}</span>
+                <span style={{ position: "relative", color: COLOR.faint, textAlign: "right" }}>{compactQty(b.cum)}</span>
               </div>
             ))
           )}
         </div>
         <div>
-          <div style={{ fontSize: 11, color: COLOR.down, marginBottom: 6, fontFamily: "monospace", textAlign: "right" }}>ASKS</div>
-          {asks.length === 0 ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", fontSize: 10, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase", padding: "0 8px", marginBottom: 4 }}>
+            <span>Cum</span>
+            <span style={{ textAlign: "right" }}>Qty</span>
+            <span style={{ textAlign: "right", color: COLOR.down }}>Asks</span>
+          </div>
+          {askRows.length === 0 ? (
             <div style={emptyBoxStyle}>
               <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>No asks</span>
               <span style={{ fontSize: 11, color: COLOR.faint }}>Waiting for live book</span>
             </div>
           ) : (
-            asks.map((a) => (
-              <div key={a[0]} style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
-                <div style={{ position: "absolute", inset: 0, background: COLOR.down, opacity: 0.1, left: "auto", width: `${(a[1] / maxDepth) * 100}%` }} />
-                <span style={{ position: "relative", color: COLOR.muted }}>{a[1].toLocaleString()}</span>
-                <span style={{ position: "relative", color: COLOR.down }}>{pct(a[0])}</span>
+            askRows.map((a) => (
+              <div key={a.p} style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "5px 8px", fontSize: 12.5, fontFamily: "monospace" }}>
+                <div style={{ position: "absolute", inset: 0, background: COLOR.down, opacity: 0.1, left: "auto", width: `${(a.cum / Math.max(askRows[askRows.length - 1].cum, 1)) * 100}%` }} />
+                <span style={{ position: "relative", color: COLOR.faint }}>{compactQty(a.cum)}</span>
+                <span style={{ position: "relative", color: COLOR.muted, textAlign: "right" }}>{a.q.toLocaleString()}</span>
+                <span style={{ position: "relative", color: COLOR.down, textAlign: "right" }}>{pct(a.p)}</span>
               </div>
             ))
           )}
@@ -175,6 +336,7 @@ function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: s
   const price = side === "YES" ? marketProb : 1 - marketProb;
   const orderValue = amountNum * price;
   const fees = orderValue * 0.001;
+  const payout = amountNum * 1;
 
   const riskCheck = useMemo(() => {
     if (amountNum === 0) return null;
@@ -241,6 +403,8 @@ function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: s
         <span>Value <span style={{ fontFamily: "monospace", color: COLOR.text }}>${orderValue.toFixed(2)}</span></span>
         <span style={{ color: COLOR.faint }}>|</span>
         <span>Fee <span style={{ fontFamily: "monospace", color: COLOR.text }}>${fees.toFixed(2)}</span></span>
+        <span style={{ color: COLOR.faint }}>|</span>
+        <span>Payout <span style={{ fontFamily: "monospace", color: COLOR.up }}>${payout.toFixed(2)}</span></span>
         <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.faint }}>(0.1%)</span>
       </div>
       <button className="sooth-focusable" disabled={!riskCheck?.ok || submitting} onClick={() => void handlePlace()} style={{ width: "100%", marginTop: 10, padding: "10px 0", borderRadius: 8, fontWeight: 700, fontSize: 13, fontFamily: "inherit", border: "none", cursor: riskCheck?.ok && !submitting ? "pointer" : "not-allowed", background: riskCheck?.ok && !submitting ? COLOR.accent : COLOR.surface2, color: riskCheck?.ok && !submitting ? COLOR.ink : COLOR.faint, transition: `background 150ms ${EASE}` }}>
@@ -267,7 +431,7 @@ function AccountOverview() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
         <div>
           <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace", textTransform: "uppercase" }}>Wallet</div>
-          <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.text, marginTop: 2, lineHeight: 1.3 }}>{data.balances ? `${data.balances.nativeHuman.toFixed(3)} SOMI` : "—"}</div>
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.text, marginTop: 2, lineHeight: 1.3 }}>{data.balances ? `${data.balances.nativeHuman.toFixed(3)} SOMI` : "-"}</div>
           <div style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.muted }}>{data.balances ? `${data.balances.tUsdcHuman.toFixed(2)} tUSDC` : "No key"}</div>
         </div>
         <div>
@@ -364,16 +528,6 @@ function BottomTabs({ marketId }: { marketId: string }) {
   );
 }
 
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
-  if (!active || !payload || payload.length === 0 || label === undefined) return null;
-  return (
-    <div style={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 6, padding: "6px 10px" }}>
-      <div style={{ ...PANEL_LABEL, fontSize: 10, marginBottom: 2 }}>{formatClock(label)}</div>
-      <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: COLOR.accent }}>{pct(payload[0].value)}</div>
-    </div>
-  );
-}
-
 function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: MarketAnalysis | null }) {
   const [history, setHistory] = useState<Array<{ capturedAtIso: string; mid: number | null }>>([]);
   const [hasHistory, setHasHistory] = useState<boolean | null>(null);
@@ -431,19 +585,76 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
         >
           Market probability - history
         </PanelHeader>
-        <div style={{ height: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, border: `1px solid ${COLOR.border}`, borderRadius: 8, background: COLOR.surface2 }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${COLOR.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Activity size={16} color={COLOR.faint} />
-          </div>
-          <div style={{ fontSize: 13, color: COLOR.muted, fontWeight: 600 }}>Not enough history yet</div>
-          <div style={{ fontSize: 12, color: COLOR.faint, maxWidth: 280, textAlign: "center", lineHeight: 1.5 }}>This market just listed - the logger will capture its first snapshots soon. {isExpired ? "Market is expired." : ""}</div>
-          {analysis && <div style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>Current mid {pct(analysis.marketProbability)} • {history.length} snapshot(s) • <span style={{ color: COLOR.faint }}>HISTORICAL</span></div>}
-        </div>
+        <EmptyState mark="%" title="Not enough history yet" height={180}>
+          This market just listed - the logger will capture its first snapshots soon. {isExpired ? "Market is expired." : ""}
+          {analysis && (
+            <>
+              {" "}Current mid {pct(analysis.marketProbability)} • {history.length} snapshot(s) • <span style={{ fontFamily: "monospace" }}>HISTORICAL</span>
+            </>
+          )}
+        </EmptyState>
       </div>
     );
   }
 
-  const yTicks = [0.25, 0.5, 0.75, 1].filter((t) => t >= Math.min(...chartData.map((d) => d.p)) - 0.05 && t <= Math.max(...chartData.map((d) => d.p)) + 0.05);
+  const pairs = chartData.map((d) => [Date.parse(d.time), d.p] as [number, number]);
+  const last = pairs[pairs.length - 1];
+  const option: EChartsCoreOption = {
+    grid: { left: 46, right: 12, top: 12, bottom: 26 },
+    xAxis: {
+      type: "time",
+      axisLine: AXIS_COMMON.axisLine,
+      axisTick: AXIS_COMMON.axisTick,
+      axisLabel: AXIS_COMMON.axisLabel,
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      min: 0,
+      max: 1,
+      interval: 0.25,
+      axisLine: { show: false },
+      axisTick: AXIS_COMMON.axisTick,
+      axisLabel: { ...AXIS_COMMON.axisLabel, formatter: (v: number) => `${Math.round(v * 100)}%` },
+      splitLine: AXIS_COMMON.splitLine,
+    },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      padding: 0,
+      axisPointer: { type: "cross", lineStyle: { color: COLOR.accent, type: "dashed", width: 1 } },
+      formatter: (params: unknown) => {
+        const list = Array.isArray(params) ? params : [params];
+        const item = list[0] as { value?: unknown } | undefined;
+        const v = item?.value;
+        if (!Array.isArray(v) || typeof v[0] !== "number" || typeof v[1] !== "number") return "";
+        return tooltipBox(formatClock(new Date(v[0]).toISOString()), [["Probability", pct(v[1]), COLOR.accent]]);
+      },
+    },
+    dataZoom: [{ type: "inside", xAxisIndex: [0], filterMode: "filter" }],
+    series: [
+      {
+        name: "Probability",
+        type: "line",
+        data: pairs,
+        showSymbol: false,
+        smooth: true,
+        lineStyle: { width: 2, color: COLOR.accent },
+        areaStyle: { color: areaGradient(COLOR.accent, 0.22) },
+        emphasis: { focus: "series" },
+        markPoint: last
+          ? {
+              symbol: "circle",
+              symbolSize: 7,
+              itemStyle: { color: COLOR.accent, borderColor: COLOR.ink, borderWidth: 2 },
+              label: { show: false },
+              data: [{ name: "latest", coord: last }],
+            }
+          : undefined,
+      },
+    ],
+  };
   return (
     <div className="sooth-glass-card">
       <PanelHeader
@@ -451,21 +662,7 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
       >
         Market probability - {chartData.length} snapshots
       </PanelHeader>
-      <ResponsiveContainer width="100%" height={180}>
-        <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id="sooth-prob-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={COLOR.accent} stopOpacity={0.22} />
-              <stop offset="100%" stopColor={COLOR.accent} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid stroke={COLOR.border} strokeDasharray="0" vertical={false} />
-          <XAxis dataKey="time" tickFormatter={formatClock} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={{ stroke: COLOR.border }} tickLine={false} interval={Math.max(0, Math.floor(chartData.length / 5) - 1)} />
-          <YAxis domain={[0, 1]} ticks={yTicks.length > 0 ? yTicks : undefined} tickFormatter={pct} stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={false} tickLine={false} width={40} />
-          <Tooltip content={<ChartTooltip />} cursor={{ stroke: COLOR.accent, strokeWidth: 1, strokeDasharray: "3 3" }} />
-          <Area type="monotone" dataKey="p" stroke={COLOR.accent} strokeWidth={2} fill="url(#sooth-prob-fill)" dot={false} activeDot={{ r: 5, fill: COLOR.accent, stroke: COLOR.ink, strokeWidth: 2 }} />
-        </AreaChart>
-      </ResponsiveContainer>
+      <EChart option={option} height={180} label={`Market probability history, ${chartData.length} snapshots`} />
     </div>
   );
 }

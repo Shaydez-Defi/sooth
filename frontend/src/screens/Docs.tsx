@@ -65,7 +65,7 @@ const BUILDER_STACK: readonly Section[] = [
     lines: [
       "Backend: Fastify on :3000, strict TypeScript, SQLite WAL at data/snapshots.db.",
       "Chain kit: file:vendor bot-kit (ec-core) plus markets-sdk 0.28.1. No wallet SDK on the frontend. EIP-1193 only.",
-      "Frontend: React plus Vite on :5173, react-router, lucide icons, recharts. Dev proxy points at :3000.",
+      "Frontend: React plus Vite on :5173, react-router, lucide icons, Apache ECharts. Dev proxy points at :3000.",
       "Rules: tsc and lint clean before done. No silent catches. No magic numbers. Every number tagged.",
     ],
   },

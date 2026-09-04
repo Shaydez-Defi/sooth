@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import { ApiError, getPortfolio, getPositions, getBotPerformance, type PortfolioResponse } from "../lib/api";
 import { formatSymbolFallback } from "../lib/formatMarket";
 import { COLOR } from "../components/theme";
@@ -7,6 +6,10 @@ import { PanelHeader } from "../components/PanelHeader";
 import { ProvenanceTag } from "../components/ProvenanceTag";
 import { useWallet } from "../lib/useWallet";
 import { shortAddress } from "../lib/somnia-chain";
+import type { EChartsCoreOption } from "echarts/core";
+import { EChart } from "../components/EChart";
+import { AXIS_COMMON, areaGradient, tooltipBox } from "../components/chartTheme";
+import { EmptyState } from "../components/EmptyState";
 
 function money(v: number, opts: { signed?: boolean } = {}): string {
   const sign = v < 0 ? "-" : opts.signed && v > 0 ? "+" : "";
@@ -56,6 +59,57 @@ export default function Portfolio() {
     // If we had snapshots of portfolio equity, we'd map here. For now, honest empty.
     return [] as Array<{ t: string; v: number }>;
   }, []);
+
+  const equityOption: EChartsCoreOption = useMemo(
+    () => ({
+      grid: { left: 56, right: 12, top: 12, bottom: 26 },
+      xAxis: {
+        type: "category",
+        data: chartData.map((d) => d.t),
+        boundaryGap: false,
+        axisLine: AXIS_COMMON.axisLine,
+        axisTick: AXIS_COMMON.axisTick,
+        axisLabel: AXIS_COMMON.axisLabel,
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        scale: true,
+        axisLine: { show: false },
+        axisTick: AXIS_COMMON.axisTick,
+        axisLabel: { ...AXIS_COMMON.axisLabel, formatter: (v: number) => `$${Math.round(v)}` },
+        splitLine: AXIS_COMMON.splitLine,
+      },
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: "transparent",
+        borderWidth: 0,
+        padding: 0,
+        axisPointer: { type: "cross", lineStyle: { color: COLOR.accent, type: "dashed", width: 1 } },
+        formatter: (params: unknown) => {
+          const list = Array.isArray(params) ? params : [params];
+          const item = list[0] as { value?: unknown; name?: unknown } | undefined;
+          const v = item?.value;
+          if (typeof v !== "number") return "";
+          return tooltipBox(String(item?.name ?? "Equity"), [["Equity", `$${v.toFixed(2)}`, COLOR.accent]]);
+        },
+      },
+      dataZoom: [{ type: "inside", xAxisIndex: [0], filterMode: "filter" }],
+      series: [
+        {
+          name: "Equity",
+          type: "line",
+          data: chartData.map((d) => d.v),
+          showSymbol: false,
+          smooth: true,
+          lineStyle: { width: 1.8, color: COLOR.accent },
+          areaStyle: { color: areaGradient(COLOR.accent, 0.18) },
+          emphasis: { focus: "series" },
+        },
+      ],
+    }),
+    [chartData],
+  );
 
   if (loading) {
     return (
@@ -116,29 +170,11 @@ export default function Portfolio() {
                 <ProvenanceTag tag="DERIVED" small />
               </div>
               {!hasChartData ? (
-                <div style={{ height: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, border: `1px solid ${COLOR.border}`, borderRadius: 8, background: COLOR.surface2 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${COLOR.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ fontFamily: "monospace", fontSize: 14, color: COLOR.faint }}>$</span>
-                  </div>
-                  <div style={{ fontSize: 13, color: COLOR.muted, fontWeight: 600 }}>Not enough history yet</div>
-                  <div style={{ fontSize: 11, color: COLOR.faint, maxWidth: 300, textAlign: "center", lineHeight: 1.5 }}>P&L history needs at least 2 settled fills. Trade a few markets, then this chart will show real equity over time. <span style={{ fontFamily: "monospace" }}>HISTORICAL</span></div>
-                </div>
+                <EmptyState mark="$" title="Not enough history yet" height={220}>
+                  P&L history needs at least 2 settled fills. Trade a few markets, then this chart will show real equity over time. <span style={{ fontFamily: "monospace" }}>HISTORICAL</span>
+                </EmptyState>
               ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                    <defs>
-                      <linearGradient id="sooth-portfolio-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={COLOR.accent} stopOpacity="0.18" />
-                        <stop offset="100%" stopColor={COLOR.accent} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke={COLOR.border} vertical={false} />
-                    <XAxis dataKey="t" stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={{ stroke: COLOR.border }} tickLine={false} />
-                    <YAxis stroke={COLOR.faint} tick={{ fontSize: 11, fontFamily: "monospace", fill: COLOR.faint }} axisLine={false} tickLine={false} width={56} tickFormatter={(v: number) => `$${Math.round(v)}`} />
-                    <Tooltip cursor={{ stroke: COLOR.accent, strokeWidth: 1, strokeDasharray: "3 3" }} contentStyle={{ background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 6 }} />
-                    <Area type="monotone" dataKey="v" stroke={COLOR.accent} strokeWidth={1.8} fill="url(#sooth-portfolio-fill)" dot={false} activeDot={{ r: 4, fill: COLOR.accent, stroke: COLOR.ink, strokeWidth: 2 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <EChart option={equityOption} height={220} label="Portfolio equity over time" />
               )}
             </div>
 
@@ -153,11 +189,15 @@ export default function Portfolio() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {positions.map((p) => {
                     const fmt = formatSymbolFallback(p.symbol);
+                    const sideColor = p.side === "YES" ? COLOR.up : p.side === "NO" ? COLOR.down : COLOR.muted;
                     return (
                       <div key={p.marketId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: COLOR.surface2, borderRadius: 6, border: `1px solid ${COLOR.border}` }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: COLOR.text, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fmt.title}>{fmt.label}</div>
-                          <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace" }}>{fmt.sublabel || p.symbol} · {p.side}</div>
+                        <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: sideColor, border: `1px solid ${sideColor}`, borderRadius: 4, padding: "2px 6px", flexShrink: 0 }}>{p.side}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: COLOR.text, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fmt.title}>{fmt.label}</div>
+                            <div style={{ fontSize: 11, color: COLOR.faint, fontFamily: "monospace" }}>{fmt.sublabel || p.symbol}</div>
+                          </div>
                         </div>
                         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
                           <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.text }}>${Math.abs(p.netPosition).toFixed(2)}</div>

@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { postAnalyze, postBacktest } from "../lib/api";
 // Original palette from sooth-landing-full-v7.jsx - preserved byte-for-byte, not unified
 const COLOR = {
   ink: "#0A0908",
@@ -149,53 +148,19 @@ export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const navigate = useNavigate();
-  const [livePreview, setLivePreview] = useState<Array<{ label: string; edge: string }>>([]);
-  const [livePreviewLoading, setLivePreviewLoading] = useState(true);
-  const [backtestStats, setBacktestStats] = useState<{ trades: number; winRate: string; avgEdge: string; maxDrawdown: string } | null>(null);
-  const [backtestLoading, setBacktestLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    void postAnalyze({ all: true })
-      .then((res) => {
-        if (cancelled) return;
-        const top = [...res.data].sort((a, b) => Math.abs(b.analysis.edge) - Math.abs(a.analysis.edge)).slice(0, 3).map((d) => {
-          const e = d.analysis.edge;
-          const label = d.symbol.length > 22 ? d.symbol.slice(0, 22) + "..." : d.symbol;
-          const edge = Math.abs(e) < 0.005 ? "NO TRADE" : `${e >= 0 ? "+" : ""}${(e * 100).toFixed(1)}%`;
-          return { label, edge };
-        });
-        setLivePreview(top);
-      })
-      .catch(() => {
-        if (!cancelled) setLivePreview([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLivePreviewLoading(false);
-      });
-    void postBacktest({ limit: 50, startingCapital: 1000, sizePerTrade: 1 })
-      .then((res) => {
-        if (cancelled) return;
-        if (res.data.metrics) {
-          const m = res.data.metrics;
-          setBacktestStats({
-            trades: m.numberOfTrades,
-            winRate: m.numberOfTrades ? `${Math.round(m.winRate * 100)}%` : "-",
-            avgEdge: `${(m.averageEdge * 100).toFixed(1)}%`,
-            maxDrawdown: `${m.maximumDrawdown.toFixed(2)}`,
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setBacktestStats(null);
-      })
-      .finally(() => {
-        if (!cancelled) setBacktestLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Marketing preview - static sample rows, never fetched. Live data lives in /markets.
+  const previewRows = [
+    { label: "BTC-15m-2345/tUSDC", edge: "+5.2%" },
+    { label: "ETH-15m-2345/tUSDC", edge: "+3.1%" },
+    { label: "SOL-1h-0000/tUSDC", edge: "NO TRADE" },
+  ] as const;
+  const previewStats = [
+    ["Trades", "128"],
+    ["Win rate", "57%"],
+    ["Avg edge", "+3.4%"],
+    ["Max drawdown", "12.40"],
+  ] as const;
 
   return (
     <div style={{ background: COLOR.ink, color: COLOR.text, fontFamily: "'Manrope', system-ui, sans-serif", minHeight: "100vh" }}>
@@ -322,18 +287,12 @@ export default function Landing() {
               <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, textTransform: "uppercase" }}>Market</span>
               <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, textTransform: "uppercase" }}>Edge</span>
             </div>
-            {livePreviewLoading ? (
-              <div style={{ padding: "16px", fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>Loading live markets...</div>
-            ) : livePreview.length === 0 ? (
-              <div style={{ padding: "16px", fontSize: 12, color: COLOR.faint }}>No live markets - check back after logger captures the next snapshots.</div>
-            ) : (
-              livePreview.map((row, i, arr) => (
-                <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: i < arr.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
-                  <span style={{ fontSize: 13, fontFamily: "monospace", color: COLOR.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{row.label}</span>
-                  <span style={{ fontFamily: "monospace", fontSize: 13, color: row.edge === "NO TRADE" ? COLOR.faint : COLOR.accent, flexShrink: 0, marginLeft: 12 }}>{row.edge}</span>
-                </div>
-              ))
-            )}
+            {previewRows.map((row, i, arr) => (
+              <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: i < arr.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
+                <span style={{ fontSize: 13, fontFamily: "monospace", color: COLOR.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{row.label}</span>
+                <span style={{ fontFamily: "monospace", fontSize: 13, color: row.edge === "NO TRADE" ? COLOR.faint : COLOR.accent, flexShrink: 0, marginLeft: 12 }}>{row.edge}</span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -343,23 +302,12 @@ export default function Landing() {
             Sooth isn&apos;t making predictions - it&apos;s measuring whether a strategy has an exploitable edge, against real historical conditions, before any capital moves.
           </p>
           <div className="sooth-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24, maxWidth: 640 }}>
-            {backtestLoading ? (
-              <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint, gridColumn: "1 / -1" }}>Loading backtest...</div>
-            ) : backtestStats ? (
-              ([
-                ["Trades", String(backtestStats.trades)],
-                ["Win rate", backtestStats.winRate],
-                ["Avg edge", backtestStats.avgEdge],
-                ["Max drawdown", backtestStats.maxDrawdown],
-              ] as Array<[string, string]>).map(([label, value]) => (
-                <div key={label} style={{ borderTop: `1px solid ${COLOR.border}`, paddingTop: 12 }}>
-                  <div style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 600 }}>{value}</div>
-                  <div style={{ fontSize: 12, color: COLOR.faint, marginTop: 4 }}>{label}</div>
-                </div>
-              ))
-            ) : (
-              <div style={{ fontSize: 12, color: COLOR.faint, gridColumn: "1 / -1" }}>No backtest data yet - run a backtest in Strategy Lab.</div>
-            )}
+            {previewStats.map(([label, value]) => (
+              <div key={label} style={{ borderTop: `1px solid ${COLOR.border}`, paddingTop: 12 }}>
+                <div style={{ fontFamily: "monospace", fontSize: 22, fontWeight: 600 }}>{value}</div>
+                <div style={{ fontSize: 12, color: COLOR.faint, marginTop: 4 }}>{label}</div>
+              </div>
+            ))}
           </div>
         </section>
 

@@ -144,14 +144,6 @@ function SectionHeading({ eyebrow, center, children }: { eyebrow?: string; cente
   );
 }
 
-const DEMO_WHY: ReadonlyArray<readonly [string, string]> = [
-  ["Underlying momentum", "STRONG"],
-  ["Buy pressure", "HIGH"],
-  ["Liquidity", "GOOD"],
-  ["Repricing", "DETECTED"],
-  ["Risk", "PASSED"],
-];
-
 const STEPS: ReadonlyArray<readonly [string, string, string]> = [
   ["01", "WATCH", "Sooth continuously monitors live Event Contracts."],
   ["02", "ANALYZE", "It combines market price, order flow, liquidity, movement and time."],
@@ -167,7 +159,7 @@ export default function Landing() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ background: COLOR.ink, color: COLOR.text, fontFamily: "'Manrope', system-ui, sans-serif", minHeight: "100vh" }}>
+    <div style={{ background: COLOR.ink, color: COLOR.text, fontFamily: "'Manrope', system-ui, sans-serif", minHeight: "100vh", position: "relative", overflow: "hidden" }}>
       <style>{`
         * { box-sizing: border-box; }
         .sooth-link { color: ${COLOR.muted}; text-decoration: none; font-size: 14px; transition: color 150ms ${EASE}; }
@@ -188,6 +180,9 @@ export default function Landing() {
         @media (prefers-reduced-motion: reduce) {
           .sooth-btn-primary:active, .sooth-btn-outline:active { transform: none !important; }
         }
+        @media (max-width: 900px) {
+          .sooth-float-hide { display: none !important; }
+        }
         @media (max-width: 767px) {
           .sooth-desktop-nav { display: none !important; }
           .sooth-mobile-toggle { display: flex !important; }
@@ -199,7 +194,9 @@ export default function Landing() {
         }
       `}</style>
 
-      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "0 24px" }}>
+      <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: 0, background: `radial-gradient(900px circle at 50% -5%, rgba(204,136,153,0.10), transparent 60%), radial-gradient(700px circle at 85% 45%, rgba(204,136,153,0.05), transparent 60%), radial-gradient(700px circle at 10% 80%, rgba(107,158,120,0.04), transparent 60%)`, pointerEvents: "none" }} />
+
+      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "0 24px", position: "relative", zIndex: 1 }}>
         <header style={{ borderBottom: `1px solid ${COLOR.border}`, position: "sticky", top: 0, background: COLOR.ink, zIndex: 20 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -233,47 +230,58 @@ export default function Landing() {
           )}
         </header>
 
-        <section style={{ padding: "72px 0 64px", borderBottom: `1px solid ${COLOR.border}` }}>
-          <div className="sooth-grid-2" style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 48, alignItems: "center" }}>
-            <div>
-              <h1 className="sooth-hero-h1" style={{ fontSize: 52, fontWeight: 600, lineHeight: 1.1, color: COLOR.text, margin: 0 }}>
-                Know what to trade.
-              </h1>
-              <p style={{ maxWidth: "44ch", margin: "24px 0 0", color: COLOR.muted, fontSize: 18, lineHeight: 1.55 }}>
-                Sooth watches DreamDEX Event Contracts in real time, analyzes the market from multiple signals, and tells you when a market is worth trading - or when to stay out.
-              </p>
-              <div style={{ display: "flex", gap: 12, marginTop: 36, flexWrap: "wrap" }}>
-                <button className="sooth-focusable sooth-btn-primary" style={{ padding: "13px 28px", fontSize: 14 }} onClick={() => navigate("/markets")}>
-                  Explore Markets
-                </button>
-                <button className="sooth-focusable sooth-btn-outline" style={{ padding: "13px 28px", fontSize: 14 }} onClick={() => navigate("/intelligence")}>
-                  See How It Works
-                </button>
+        <section style={{ padding: "48px 0 40px", borderBottom: `1px solid ${COLOR.border}`, textAlign: "center" }}>
+          <h1 className="sooth-hero-h1" style={{ fontSize: 56, fontWeight: 650, lineHeight: 1.05, color: COLOR.text, margin: "0 auto", maxWidth: "14ch" }}>
+            Know what to trade.
+          </h1>
+          <p style={{ maxWidth: "52ch", margin: "16px auto 0", color: COLOR.muted, fontSize: 17, lineHeight: 1.5 }}>
+            Sooth watches DreamDEX Event Contracts in real time, analyzes the market from multiple signals, and tells you when a market is worth trading - or when to stay out.
+          </p>
+          <div style={{ display: "flex", gap: 12, marginTop: 24, flexWrap: "wrap", justifyContent: "center" }}>
+            <button className="sooth-focusable sooth-btn-primary" style={{ padding: "12px 26px", fontSize: 14 }} onClick={() => navigate("/markets")}>
+              Explore Markets
+            </button>
+            <a href="#how" className="sooth-focusable sooth-btn-outline" style={{ padding: "12px 26px", fontSize: 14, textDecoration: "none", display: "inline-block" }}>
+              See How It Works
+            </a>
+          </div>
+          <div style={{ position: "relative", maxWidth: 880, margin: "32px auto 0", textAlign: "left" }}>
+            <div aria-hidden="true" style={{ position: "absolute", inset: "-48px -32px", background: "radial-gradient(50% 50% at 50% 40%, rgba(204,136,153,0.16), transparent 70%)", filter: "blur(48px)", pointerEvents: "none" }} />
+            <div style={{ position: "relative", borderRadius: 15, padding: 1, background: "linear-gradient(180deg, rgba(204,136,153,0.45), rgba(204,136,153,0.08) 40%, rgba(42,40,31,0.9))", boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 120px rgba(204,136,153,0.08)" }}>
+            <div style={{ borderRadius: 14, background: "linear-gradient(180deg, #1B1A15 0%, #141310 100%)", overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(244,242,237,0.09)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: `1px solid ${COLOR.border}` }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: COLOR.down, display: "inline-block", opacity: 0.7 }} />
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#D6A64F", display: "inline-block", opacity: 0.7 }} />
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: COLOR.up, display: "inline-block", opacity: 0.7 }} />
+                <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, marginLeft: 8 }}>sooth — markets</span>
               </div>
+              {[
+                { label: "ETH UP", price: "58¢", decision: "TRADE" as const, score: "84" },
+                { label: "BTC DOWN", price: "61¢", decision: "NO_TRADE" as const, score: "22" },
+                { label: "ETH UP", price: "63¢", decision: "WATCH" as const, score: "51" },
+              ].map((r, i, arr) => (
+                <div key={`${r.label}-${r.price}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderBottom: i < arr.length - 1 ? `1px solid ${COLOR.border}` : "none" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 15, color: COLOR.muted }}>{r.price}</span>
+                  <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.faint }}>{r.score}<span style={{ fontSize: 10 }}> / 100</span></span>
+                    <DecisionBadge decision={r.decision} />
+                  </span>
+                </div>
+              ))}
             </div>
-            <div style={{ border: `1px solid ${COLOR.border}`, borderRadius: 12, padding: 20, background: COLOR.surface }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>ETH UP</span>
-                <span style={{ fontFamily: "monospace", fontSize: 10, color: COLOR.up, border: `1px solid ${COLOR.up}`, padding: "1px 6px", borderRadius: 3 }}>LIVE</span>
-              </div>
-              <div style={{ fontFamily: "monospace", fontSize: 44, fontWeight: 800, marginTop: 8 }}>58¢</div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 16, paddingTop: 16, borderTop: `1px solid ${COLOR.border}` }}>
-                <span style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: COLOR.faint }}>Sooth</span>
-                <span style={{ fontFamily: "monospace", fontSize: 30, fontWeight: 800, color: COLOR.accent }}>67¢</span>
-                <DecisionBadge decision="TRADE" />
-              </div>
-              <div style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.up, marginTop: 6 }}>+9¢ difference</div>
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COLOR.border}`, display: "flex", flexDirection: "column", gap: 7 }}>
-                <div style={{ fontFamily: "monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: COLOR.faint, marginBottom: 2 }}>Why?</div>
-                {DEMO_WHY.map(([label, level]) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                    <span style={{ color: COLOR.muted }}>{label}</span>
-                    <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: COLOR.up }}>{level}</span>
-                  </div>
-                ))}
+            </div>
+            <div className="sooth-float-hide" style={{ position: "absolute", right: 12, top: -30, border: "1px solid rgba(204,136,153,0.25)", borderRadius: 10, background: "linear-gradient(180deg, #1E1D18 0%, #141310 100%)", padding: "12px 16px", boxShadow: "inset 0 1px 0 rgba(244,242,237,0.09), 0 16px 40px rgba(0,0,0,0.55), 0 0 48px rgba(204,136,153,0.10)" }}>
+              <div style={{ fontFamily: "monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: COLOR.faint }}>Top opportunity</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>ETH UP</span>
+                <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 800, color: COLOR.accent }}>84</span>
               </div>
             </div>
           </div>
+          <p style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: "0.05em", color: COLOR.faint, marginTop: 20 }}>
+            Live testnet data · No real money
+          </p>
         </section>
 
         <section style={{ padding: "80px 0", borderBottom: `1px solid ${COLOR.border}` }}>

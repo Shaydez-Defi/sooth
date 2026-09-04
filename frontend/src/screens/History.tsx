@@ -77,7 +77,7 @@ export default function History() {
       <style>{`
         * { box-sizing: border-box; }
         .sooth-focusable:focus-visible { outline: 2px solid ${COLOR.accent}; outline-offset: 2px; }
-        .sooth-glass-card { position: relative; padding: 16px; background: rgba(20, 19, 15, 0.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(204,136,153,0.14); border-radius: 8px; box-shadow: inset 0 1px 0 rgba(244,242,237,0.05), 0 6px 20px rgba(0,0,0,0.35); }
+        .sooth-glass-card { position: relative; padding: 16px; background: linear-gradient(180deg, rgba(27,26,21,0.72), rgba(20,19,15,0.55)); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(204,136,153,0.16); border-radius: 10px; box-shadow: inset 0 1px 0 rgba(244,242,237,0.07), inset 0 0 0 1px rgba(0,0,0,0.25), 0 14px 34px rgba(0,0,0,0.42); }
       `}</style>
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div>

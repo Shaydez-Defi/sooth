@@ -113,18 +113,8 @@ function DecisionHero({
   );
 }
 
-function TechnicalAnalysis({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="sooth-glass-card">
-      <button className="sooth-focusable" onClick={() => setOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: 12, color: COLOR.muted, padding: 0 }}>
-        <ChevronDown size={14} color={COLOR.faint} style={{ transform: open ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}`, flexShrink: 0 }} />
-        View technical analysis
-      </button>
-      {open && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>{children}</div>}
-    </div>
-  );
-}
+const DETAIL_TABS = ["Decision", "Market", "Trade", "Activity"] as const;
+type DetailTab = (typeof DETAIL_TABS)[number];
 
 function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | null; marketId: string; formatted: { label: string; sublabel: string; title: string } | null }) {
   const [open, setOpen] = useState(false);
@@ -908,6 +898,7 @@ export default function MarketDetail() {
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
   const [decision, setDecision] = useState<DecisionOutput | null>(null);
   const [gateChecks, setGateChecks] = useState<DecisionGateCheck[]>([]);
+  const [tab, setTab] = useState<DetailTab>("Decision");
   const [bids, setBids] = useState<[number, number][]>([]);
   const [asks, setAsks] = useState<[number, number][]>([]);
   const [loading, setLoading] = useState(true);
@@ -985,7 +976,8 @@ export default function MarketDetail() {
       <style>{`
         * { box-sizing: border-box; }
         .sooth-focusable:focus-visible { outline: 2px solid ${COLOR.accent}; outline-offset: 2px; }
-        .sooth-glass-card { position: relative; padding: 16px; background: rgba(20, 19, 15, 0.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(204, 136, 153, 0.14); border-radius: 8px; box-shadow: inset 0 1px 0 rgba(244, 242, 237, 0.05), 0 6px 20px rgba(0, 0, 0, 0.35); }
+        .sooth-tab { background: none; border: none; cursor: pointer; font-family: inherit; fontSize: 13px; padding: 6px 12px; border-radius: 6px; transition: background 150ms ${EASE}, color 150ms ${EASE}; }
+        .sooth-glass-card { position: relative; padding: 16px; background: linear-gradient(180deg, rgba(27,26,21,0.72), rgba(20,19,15,0.55)); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(204,136,153,0.16); border-radius: 10px; box-shadow: inset 0 1px 0 rgba(244,242,237,0.07), inset 0 0 0 1px rgba(0,0,0,0.25), 0 14px 34px rgba(0,0,0,0.42); }
         .sooth-amount-input::placeholder { color: ${COLOR.faint}; }
         .sooth-amount-input:focus { border-color: ${COLOR.accent} !important; outline: none; }
         @media (max-width: 1000px) { .sooth-detail-grid { grid-template-columns: 1fr !important; } }
@@ -1008,25 +1000,38 @@ export default function MarketDetail() {
             <button onClick={() => void load()} className="sooth-focusable" style={{ marginTop: 10, padding: "6px 12px", borderRadius: 6, border: `1px solid ${COLOR.border}`, background: COLOR.surface2, color: COLOR.text, cursor: "pointer", fontSize: 12 }}>Retry</button>
           </div>
         )}
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}>
           {!loading && analysis && (
-            <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.65fr) 360px", gap: 16, alignItems: "start" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <DecisionHero analysis={analysis} decision={decision} formatted={formatted} />
-                <ReasoningTrace analysis={analysis} decision={decision} gateChecks={gateChecks} />
-                <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} decision={decision} onPlaced={() => void load()} />
-                <TechnicalAnalysis>
+            <>
+              <TopBar analysis={analysis} marketId={marketId} formatted={formatted} />
+              <div style={{ display: "flex", gap: 4, background: COLOR.surface2, borderRadius: 8, padding: 4, width: "fit-content", maxWidth: "100%", overflowX: "auto" }}>
+                {DETAIL_TABS.map((t) => (
+                  <button key={t} className="sooth-tab sooth-focusable" onClick={() => setTab(t)} style={{ background: tab === t ? COLOR.accent : "transparent", color: tab === t ? COLOR.ink : COLOR.muted, fontWeight: tab === t ? 600 : 400, whiteSpace: "nowrap" }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {tab === "Decision" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <DecisionHero analysis={analysis} decision={decision} formatted={formatted} />
+                  <ReasoningTrace analysis={analysis} decision={decision} gateChecks={gateChecks} />
+                </div>
+              )}
+              {tab === "Market" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <DepthChart bids={bids} asks={asks} />
                   <ProbabilityChart marketId={marketId} analysis={analysis} />
                   <BottomTabs marketId={marketId} />
-                </TechnicalAnalysis>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <TopBar analysis={analysis} marketId={marketId} formatted={formatted} />
-                <EventLog marketId={marketId} />
-                <AccountOverview />
-              </div>
-            </div>
+                </div>
+              )}
+              {tab === "Trade" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} decision={decision} onPlaced={() => void load()} />
+                  <AccountOverview />
+                </div>
+              )}
+              {tab === "Activity" && <EventLog marketId={marketId} />}
+            </>
           )}
         </div>
       </div>

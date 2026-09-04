@@ -151,9 +151,10 @@ export function MarketCard({
       className="sooth-focusable"
       style={{
         textAlign: "left",
-        background: "rgba(20, 19, 15, 0.5)",
-        border: "1px solid rgba(204,136,153,0.14)",
-        borderRadius: 8,
+        background: "linear-gradient(180deg, rgba(27,26,21,0.72), rgba(20,19,15,0.55))",
+        border: "1px solid rgba(204,136,153,0.16)",
+        borderRadius: 10,
+        boxShadow: "inset 0 1px 0 rgba(244,242,237,0.07), inset 0 0 0 1px rgba(0,0,0,0.25), 0 14px 34px rgba(0,0,0,0.42)",
         padding: 16,
         cursor: "pointer",
         fontFamily: "inherit",

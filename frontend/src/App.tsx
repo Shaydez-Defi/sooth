@@ -25,18 +25,19 @@ function TopNav() {
     color: isActive ? COLOR.text : COLOR.muted,
     fontWeight: isActive ? 600 : 400,
     textDecoration: "none",
-    fontSize: 14,
-    borderBottom: isActive ? `2px solid ${COLOR.accent}` : "2px solid transparent",
-    paddingBottom: 4,
+    fontSize: 13,
+    background: isActive ? "rgba(204,136,153,0.12)" : "transparent",
+    borderRadius: 6,
+    padding: "6px 10px",
   });
   return (
     <>
-      <nav style={{ position: "sticky", top: 0, zIndex: 20, background: COLOR.ink, borderBottom: `1px solid ${COLOR.border}`, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+      <nav style={{ position: "sticky", top: 0, zIndex: 20, background: COLOR.ink, borderBottom: `1px solid ${COLOR.border}`, padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: COLOR.text }}>
           <OrbMark size={20} />
           <span style={{ fontWeight: 700, fontSize: 14 }}>SOOTH</span>
         </Link>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 4, alignItems: "center", overflowX: "auto" }}>
           <NavLink to="/markets" style={({ isActive }) => activeStyle(isActive)}>Markets</NavLink>
           <NavLink to="/intelligence" style={({ isActive }) => activeStyle(isActive)}>Intelligence</NavLink>
           <NavLink to="/positions" style={({ isActive }) => activeStyle(isActive)}>Positions</NavLink>

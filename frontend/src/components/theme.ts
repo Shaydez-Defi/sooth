@@ -17,7 +17,7 @@ export const EASE = "cubic-bezier(0.32, 0.72, 0, 1)" as const;
 
 export const SPACE = { header: 12, block: 16, panel: 20 } as const;
 
-// PANEL_LABEL is a style object, not a component - shared between MarketDetail and StrategyLab
+// PANEL_LABEL is a style object, not a component - shared between MarketDetail and Backtest
 export const PANEL_LABEL_STYLE: React.CSSProperties = {
   fontFamily: "monospace",
   fontSize: 11,

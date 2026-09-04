@@ -228,6 +228,13 @@ export function recentSnapshots(db: Database.Database, limit = 10): SnapshotRow[
   return db.prepare("SELECT * FROM snapshots ORDER BY capturedAtUnix DESC, id DESC LIMIT ?").all(limit) as SnapshotRow[];
 }
 
+/** Recent rows for one market, newest first - feeds momentum/volatility windows. */
+export function recentSnapshotsForMarket(db: Database.Database, marketId: string, limit = 10): SnapshotRow[] {
+  return db
+    .prepare("SELECT * FROM snapshots WHERE marketId=? ORDER BY capturedAtUnix DESC, id DESC LIMIT ?")
+    .all(marketId, limit) as SnapshotRow[];
+}
+
 // ── Bot tables (reuse same DB file) ────────────────────────────────────────────
 
 export interface BotEventRow {

@@ -8,7 +8,9 @@
  */
 
 import { createExchange } from "@dreamdex-bot-kit/ec-core";
-import { runBacktestWithHistory } from "../backtest/engine.js";
+import { runBacktestWithHistory, syntheticBookAround } from "../backtest/engine.js";
+import { evaluateDecisions, type DecisionEvalMarket } from "../backtest/decisionReport.js";
+import { fetchReferenceWindow } from "../analysis/referenceFeed.js";
 import { loadHistoriesForSettledMarkets } from "../backtest/historicalBooks.js";
 import { openSnapshotDb } from "../snapshots/db.js";
 import { ANALYSIS_CONFIG } from "../config.js";
@@ -141,6 +143,65 @@ async function main(): Promise<void> {
     console.log(`  ${h.marketId.slice(0, 18)} ${h.symbol} expiry=${h.expiry} snaps=${h.snapshotCount} path=${h.dataPath} winning=${String(h.winningOutcome)}`);
   }
   if (histories.length > 20) console.log(`  … and ${histories.length - 20} more`);
+
+  // Stage 11 - decision-framework report on the same real histories. Reference
+  // windows come from the live price feed where it retains the range, else N/A.
+  console.log("\n=== Decision Framework Report (multi-variable TRADE/WATCH/NO_TRADE) ===");
+  const decisionInputs: DecisionEvalMarket[] = [];
+  for (const h of histories) {
+    const asset = h.symbol.split("-")[0] ?? "?";
+    if (h.snapshots.length > 0) {
+      const times = h.snapshots.map((s) => s.capturedAtUnix);
+      const from = Math.min(...times);
+      const to = Math.max(...times);
+      const ticks = await fetchReferenceWindow(ctx, asset, from, to).catch(() => []);
+      decisionInputs.push({
+        marketId: h.marketId,
+        symbol: h.symbol,
+        asset,
+        expiry: h.expiry,
+        winningOutcome: h.winningOutcome,
+        voided: h.voided,
+        snapshots: h.snapshots.map((s) => ({ capturedAtUnix: s.capturedAtUnix, bids: s.bids, asks: s.asks, mid: s.mid })),
+        fallbackBook: null,
+        referenceTicks: ticks,
+        referenceAsset: ticks.length > 0 ? asset : null,
+        bookTag: "HISTORICAL",
+      });
+    } else {
+      const book = syntheticBookAround(h.lastPrice ?? 0.5);
+      decisionInputs.push({
+        marketId: h.marketId,
+        symbol: h.symbol,
+        asset,
+        expiry: h.expiry,
+        winningOutcome: h.winningOutcome,
+        voided: h.voided,
+        snapshots: [],
+        fallbackBook: book,
+        referenceTicks: [],
+        referenceAsset: null,
+        bookTag: "ESTIMATED",
+      });
+    }
+  }
+  const dreport = evaluateDecisions(decisionInputs);
+  console.log(`markets evaluated: ${dreport.marketsEvaluated} (snapshots evaluated: ${dreport.snapshotsEvaluated})`);
+  console.log(`trades taken: ${dreport.tradesTaken} (TRADE-signal snapshots: ${dreport.tradeSignalSnapshots}, WATCH: ${dreport.watchSnapshots}, NO_TRADE: ${dreport.noTradeSnapshots})`);
+  console.log(`rejection reasons: ${Object.entries(dreport.rejectionReasons).map(([k, n]) => `${k}=${n}`).join(", ") || "(none)"}`);
+  console.log(`predicted vs actual: ${dreport.predictions.filter((p) => p.correct === true).length} correct / ${dreport.predictions.filter((p) => p.correct === false).length} wrong / ${dreport.predictions.filter((p) => p.correct === null).length} unknown`);
+  console.log(`realized edge avg: ${dreport.realizedEdgeAvg === null ? "N/A" : dreport.realizedEdgeAvg.toFixed(4)}`);
+  console.log(`decision P&L: ${dreport.totalPnL >= 0 ? "+" : ""}${dreport.totalPnL.toFixed(4)} tUSDC`);
+  console.log(`decision win rate: ${dreport.winRate === null ? "N/A (no decided outcomes)" : `${(dreport.winRate * 100).toFixed(1)}%`}`);
+  console.log(`insufficient snapshot history: ${dreport.insufficientHistory} markets (momentum/volatility N/A there)`);
+  if (dreport.unevaluated > 0) console.log(`unevaluated (no book at all): ${dreport.unevaluated}`);
+  for (const p of dreport.predictions.slice(0, 10)) {
+    console.log(`  ${p.marketId.slice(0, 18)} ${p.symbol} predicted=${p.predicted} entry=${p.entryPrice.toFixed(4)} actual=${p.actual} correct=${String(p.correct)} pnl=${p.pnl >= 0 ? "+" : ""}${p.pnl.toFixed(4)} book=${p.bookTag}`);
+  }
+  if (dreport.predictions.length > 10) console.log(`  … and ${dreport.predictions.length - 10} more predictions`);
+  if (dreport.tradesTaken === 0) {
+    console.log("(no trades taken - decision layer said NO_TRADE/WATCH everywhere on real data; reported as-is, not tuned to force trades)");
+  }
 
   console.log("\n[VERIFICATION_JSON] " + JSON.stringify({ marketsPulled: rows.length, withHistory, withoutHistory, metrics, perMarket: histories.map((h) => ({ marketId: h.marketId, symbol: h.symbol, expiry: h.expiry, snapshotCount: h.snapshotCount, dataPath: h.dataPath, winningOutcome: h.winningOutcome })) }, null, 2));
 

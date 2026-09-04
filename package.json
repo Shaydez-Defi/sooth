@@ -22,6 +22,7 @@
     "snapshot": "tsx src/scripts/snapshot-logger.ts",
     "settle": "tsx src/scripts/settlement-poller.ts",
     "stage9:verify": "tsx src/scripts/stage9-verify.ts",
+    "decision:demo": "tsx src/scripts/decision-demo.ts",
     "api": "tsx src/api/server.ts",
     "bundle:api": "esbuild api/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=api/index.js --external:@fastify/cors --external:@somnia-chain/markets-sdk --external:@vercel/kv --external:better-sqlite3 --external:dotenv --external:fastify --external:viem --external:ws --log-level=warning",
     "strategy:dry-run": "tsx src/scripts/strategy-dry-run.ts",

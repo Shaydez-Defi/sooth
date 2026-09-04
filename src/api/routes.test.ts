@@ -142,6 +142,28 @@ describe("API routes - shape, tags, validation", () => {
     expect(body.cacheAgeSec).toBeGreaterThanOrEqual(0);
   });
 
+  it("POST /strategies/analyze items carry a decision object", async () => {
+    const res = await server.inject({ method: "POST", url: "/strategies/analyze", payload: { all: true } });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { data: Array<{ decision: { decision: string; opportunityScore: number; reasons: string[] } | null }> };
+    expect(body.data.length).toBeGreaterThan(0);
+    const first = body.data[0];
+    expect(first?.decision).toBeDefined();
+    expect(["TRADE", "WATCH", "NO_TRADE"]).toContain(first?.decision?.decision);
+  });
+
+  it("POST /strategies/decision-report - validation rejects bad limit", async () => {
+    const res = await server.inject({ method: "POST", url: "/strategies/decision-report", payload: { limit: 0 } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("POST /strategies/decision-report - report shape on empty settled set", async () => {
+    const res = await server.inject({ method: "POST", url: "/strategies/decision-report", payload: { limit: 5 } });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { data: { report: { marketsEvaluated: number } | null } };
+    if (body.data.report) expect(body.data.report.marketsEvaluated).toBeGreaterThanOrEqual(0);
+  });
+
   it("GET /bots - single-bot id default", async () => {
     const res = await server.inject({ method: "GET", url: "/bots" });
     expect(res.statusCode).toBe(200);

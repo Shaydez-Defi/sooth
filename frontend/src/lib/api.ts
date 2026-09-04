@@ -150,9 +150,34 @@ export interface MarketAnalysis {
   readonly imbalance: number; // DERIVED
 }
 
+export interface DecisionGateCheck {
+  readonly name: string;
+  readonly pass: boolean;
+  readonly detail: string;
+}
+
+export interface DecisionSignal {
+  readonly name: "order-flow" | "momentum" | "dislocation" | "liquidity" | "spread" | "time" | "volatility" | "settlement" | "risk";
+  readonly level: "STRONG" | "GOOD" | "WEAK" | "POOR" | "DETECTED" | "NONE" | "PASSED" | "FAILED" | "PENDING" | "CONTEXT";
+  readonly detail: string;
+}
+
+export interface DecisionOutput {
+  readonly decision: "TRADE" | "WATCH" | "NO_TRADE";
+  readonly marketPrice: number;
+  readonly fairValue: number;
+  readonly rawEdge: number;
+  readonly executableEdge: number;
+  readonly opportunityScore: number;
+  readonly reasons: string[];
+  readonly signals: DecisionSignal[];
+}
+
 export interface AnalysisResponse {
   data: MarketAnalysis;
   dataIntegrity: { analysis: DataIntegrityTag; marketProbability: DataIntegrityTag; timeRemaining: DataIntegrityTag };
+  decision: DecisionOutput | null;
+  gateChecks: DecisionGateCheck[];
 }
 
 export function getAnalysis(id: string): Promise<AnalysisResponse> {
@@ -166,7 +191,7 @@ export interface AnalyzeRequest {
   all?: boolean;
 }
 export interface AnalyzeResponse {
-  data: Array<{ marketId: string; symbol: string; analysis: MarketAnalysis; dataIntegrity: unknown }>;
+  data: Array<{ marketId: string; symbol: string; analysis: MarketAnalysis; decision: DecisionOutput | null; dataIntegrity: unknown }>;
   dataIntegrity: DataIntegrityTag;
   count: number;
   cacheAgeSec?: number;
@@ -221,6 +246,52 @@ export interface BacktestResponse {
 }
 export function postBacktest(body: { limit?: number; startingCapital?: number; sizePerTrade?: number; thresholds?: Record<string, number> } = {}): Promise<BacktestResponse> {
   return apiFetch<BacktestResponse>("/strategies/backtest", { method: "POST", body: JSON.stringify(body) });
+}
+
+export interface DecisionReportPrediction {
+  readonly marketId: string;
+  readonly symbol: string;
+  readonly predicted: "YES" | "NO";
+  readonly entryPrice: number;
+  readonly executableEdge: number;
+  readonly actual: "YES" | "NO" | "VOID" | "UNKNOWN";
+  readonly correct: boolean | null;
+  readonly realizedEdge: number | null;
+  readonly pnl: number;
+  readonly bookTag: "HISTORICAL" | "ESTIMATED";
+}
+
+export interface DecisionReport {
+  readonly marketsEvaluated: number;
+  readonly snapshotsEvaluated: number;
+  readonly tradesTaken: number;
+  readonly tradeSignalSnapshots: number;
+  readonly watchSnapshots: number;
+  readonly noTradeSnapshots: number;
+  readonly rejectionReasons: Record<string, number>;
+  readonly predictions: DecisionReportPrediction[];
+  readonly realizedEdgeAvg: number | null;
+  readonly avgExecutableEdge: number | null;
+  readonly totalPnL: number;
+  readonly winRate: number | null;
+  readonly insufficientHistory: number;
+  readonly unevaluated: number;
+}
+
+export interface DecisionReportResponse {
+  data: {
+    report: DecisionReport | null;
+    count: number;
+    startingCapital: number;
+    sizePerTrade: number;
+    note?: string;
+    dataIntegrity: DataIntegrityTag;
+  };
+  dataIntegrity: DataIntegrityTag;
+}
+
+export function postDecisionReport(body: { limit?: number; startingCapital?: number; sizePerTrade?: number } = {}): Promise<DecisionReportResponse> {
+  return apiFetch<DecisionReportResponse>("/strategies/decision-report", { method: "POST", body: JSON.stringify(body) });
 }
 
 // ── Positions / Orders / Portfolio ───────────────────────────────────────────

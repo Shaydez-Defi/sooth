@@ -111,6 +111,57 @@ export const ANALYSIS_CONFIG = {
 } as const;
 
 /**
+ * DECISION FRAMEWORK - multi-variable fair value, executable edge, three-state
+ * decisions, opportunity scoring (Stage 11). All weights/gains/caps live here so
+ * tuning during testing never buries constants in logic. Units noted per field.
+ */
+export const DECISION_CONFIG = {
+  /** WATCH bar: |rawEdge| at/above this but executableEdge below MIN_EDGE → WATCH (probability points). */
+  WATCH_MIN_EDGE: 0.01,
+  /** Spread cost: spreadPenalty = spread * this (share of spread paid on entry, 0.5 = half). */
+  SPREAD_PENALTY_FACTOR: 0.5,
+  /** Slippage cost: slipPenalty = (orderSize / liquidity) * this (probability points per fill-ratio). */
+  SLIPPAGE_FACTOR: 1.0,
+  /** Reference order size (shares) for the slippage penalty - mirrors backtest sizePerTrade. */
+  ORDER_SIZE_SHARES: 1,
+  /** Momentum mapping: delta = clamp(momentumRoC * gain, ±cap), momentumRoC unitless (e.g. +0.02 = +2%). */
+  MOMENTUM_GAIN: 1.0,
+  /** Cap on |momentum delta| in probability points. */
+  MOMENTUM_CAP: 0.03,
+  /** Dislocation mapping: delta = clamp(gap * gain, ±cap), gap in rate-of-change points. */
+  DISLOCATION_GAIN: 1.0,
+  /** Cap on |dislocation delta| in probability points. */
+  DISLOCATION_CAP: 0.03,
+  /** Snapshot window: use up to this many recent real snapshots for momentum/volatility. */
+  HISTORY_LOOKBACK_COUNT: 10,
+  /** Minimum real snapshots with non-null mids to compute momentum/volatility. */
+  HISTORY_MIN_SNAPSHOTS: 5,
+  /** Minimum window span (seconds, first-to-last snapshot) for momentum/volatility. */
+  HISTORY_MIN_SPAN_SEC: 120,
+  /** Opportunity score weights (normalized in code, must be non-negative). */
+  OPPORTUNITY_WEIGHTS: {
+    /** |executableEdge| scaled by SCORE_EDGE_NORMALIZER. */
+    edge: 0.35,
+    /** Share of directional contributors agreeing with edge sign. */
+    agreement: 0.2,
+    /** Liquidity scaled by SCORE_LIQUIDITY_REF. */
+    liquidity: 0.15,
+    /** Execution quality from spread (1 - spreadBps/MAX_SPREAD_BPS). */
+    execution: 0.1,
+    /** Time buffer: timeRemaining scaled by RISK_TIME_REF_SEC. */
+    risk: 0.1,
+    /** Settlement gate pass (1) or fail (0). */
+    settlement: 0.1,
+  },
+  /** |executableEdge| that scores a full 1.0 on the edge component (probability points). */
+  SCORE_EDGE_NORMALIZER: 0.05,
+  /** Liquidity (shares) that scores a full 1.0 on the liquidity component. */
+  SCORE_LIQUIDITY_REF: 5000,
+  /** timeRemaining (seconds) that scores a full 1.0 on the risk component. */
+  RISK_TIME_REF_SEC: 3600,
+} as const;
+
+/**
  * BOT - defaults for Strategy/Risk pipeline (brief sections 7 & 9).
  * All risk thresholds in src/config.ts, no inline magic in strategy/risk modules.
  * Values are DERIVED, not LIVE_ONCHAIN.

@@ -3,8 +3,13 @@ import type { FastifyInstance } from "fastify";
 import { marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
 import { getActiveMarketsCached, getSharedCtx } from "../registryCache.js";
 import { analyzeMarket } from "../../analysis/engine.js";
-import { ANALYSIS_CONFIG, SNAPSHOT_CONFIG } from "../../config.js";
-import { openSnapshotDb } from "../../snapshots/db.js";
+import { collectVariables, isStrikePresent } from "../../analysis/variables.js";
+import { computeFairValue } from "../../analysis/contextEngine.js";
+import { checkSettlement, type GateCheck } from "../../analysis/settlementGate.js";
+import { decideMarket, type DecisionOutput } from "../../analysis/decision.js";
+import { fetchReferenceNow, fetchReferenceWindow, nearestReferenceTick } from "../../analysis/referenceFeed.js";
+import { ANALYSIS_CONFIG, DECISION_CONFIG, SNAPSHOT_CONFIG } from "../../config.js";
+import { openSnapshotDb, recentSnapshotsForMarket } from "../../snapshots/db.js";
 
 const HISTORY_DEFAULT_LIMIT = 100;
 const HISTORY_MAX_LIMIT = 500;
@@ -167,7 +172,83 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
         marketProbability: mid ?? undefined,
         timeRemaining,
       });
-      return reply.send({ data: analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } as const });
+      // Stage 11 decision output (additive) - full variables with live reference
+      // feed and real snapshot history. Never fails the analysis response.
+      let decision: DecisionOutput | null = null;
+      let gateChecks: GateCheck[] = [];
+      try {
+        const meta = found.info as unknown as {
+          marketId: string;
+          asset?: string;
+          strike?: string | number | null;
+        };
+        const asset = typeof meta.asset === "string" && meta.asset !== "" ? meta.asset : "UNKNOWN";
+        const strike = meta.strike !== undefined && meta.strike !== null ? String(meta.strike) : null;
+        const snapshotDb = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
+        let history: Array<{ mid: number; capturedAtUnix: number }> = [];
+        try {
+          history = recentSnapshotsForMarket(snapshotDb, String(info.marketId), DECISION_CONFIG.HISTORY_LOOKBACK_COUNT)
+            .filter((s) => s.mid !== null)
+            .map((s) => ({ mid: s.mid as number, capturedAtUnix: s.capturedAtUnix }));
+        } finally {
+          snapshotDb.close();
+        }
+        const referenceNow = await fetchReferenceNow(ctx, asset);
+        // Same-window discipline: dislocation compares underlying vs contract over
+        // the snapshot span, so the underlying "now" is the tick nearest the last
+        // snapshot, not live now. Live now still feeds nothing else here.
+        let windowNow = referenceNow;
+        let referenceThen: { price: number; atUnix: number } | null = null;
+        if (history.length > 0) {
+          const times = history.map((h) => h.capturedAtUnix);
+          const ticks = await fetchReferenceWindow(ctx, asset, Math.min(...times), Math.max(...times));
+          if (ticks.length > 0) {
+            const firstTick = nearestReferenceTick(ticks, Math.min(...times));
+            const lastTick = nearestReferenceTick(ticks, Math.max(...times));
+            if (firstTick) referenceThen = firstTick;
+            if (lastTick) windowNow = { asset, price: lastTick.price, ema: null, blockTimestamp: lastTick.atUnix };
+          }
+        }
+        const expiryNum = Number(onchain.expiry);
+        const statusNum = onchain.status;
+        const variables = collectVariables({
+          marketId: String(info.marketId),
+          symbol: found.symbol,
+          asset,
+          strike,
+          venueId: ctx.config.venueId ?? null,
+          expiry: Number.isFinite(expiryNum) ? expiryNum : null,
+          onchainStatus: statusNum,
+          bids,
+          asks,
+          bestBid,
+          bestAsk,
+          marketProbability: mid ?? undefined,
+          timeRemaining,
+          referenceNow: windowNow,
+          referenceThen,
+          contractHistory: history,
+        });
+        const fair = computeFairValue(variables);
+        const gate = checkSettlement({
+          marketId: String(info.marketId),
+          symbol: found.symbol,
+          expiry: Number.isFinite(expiryNum) ? expiryNum : null,
+          venueId: ctx.config.venueId ?? null,
+          onchainStatus: statusNum,
+          strikePresent: isStrikePresent(strike),
+        });
+        decision = decideMarket({ variables, fair, gate });
+        gateChecks = gate.checks;
+      } catch (err) {
+        request.log.warn(`decision layer failed, serving analysis only: ${(err as Error).message}`);
+      }
+      return reply.send({
+        data: analysis,
+        dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } as const,
+        decision,
+        gateChecks,
+      });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets/:id/analysis failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });
     }

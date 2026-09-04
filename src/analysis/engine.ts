@@ -42,6 +42,34 @@ function clamp01(n: number): number {
   return Math.min(0.99, Math.max(0.01, n));
 }
 
+export interface BookStats {
+  readonly bidDepth: number; // DERIVED - sum of top-N bid quantities
+  readonly askDepth: number; // DERIVED - sum of top-N ask quantities
+  readonly liquidity: number; // DERIVED - bidDepth + askDepth
+  readonly imbalance: number; // DERIVED - (bidDepth-askDepth)/(bidDepth+askDepth) in [-1,1], 0 when empty
+  readonly empty: boolean; // true when either side has no depth
+}
+
+/**
+ * Shared book math (Stage 3 formula) - exported so the multi-variable context
+ * engine reuses the exact same imbalance definition. No behavior change here.
+ */
+export function computeBookStats(
+  bids: ReadonlyArray<readonly [number, number]>,
+  asks: ReadonlyArray<readonly [number, number]>,
+  depthLevels: number,
+): BookStats {
+  const topBids = bids.slice(0, depthLevels);
+  const topAsks = asks.slice(0, depthLevels);
+  const bidDepth = topBids.reduce((s, [, q]) => s + q, 0);
+  const askDepth = topAsks.reduce((s, [, q]) => s + q, 0);
+  const liquidity = bidDepth + askDepth;
+  if (topBids.length === 0 || topAsks.length === 0 || liquidity === 0) {
+    return { bidDepth, askDepth, liquidity, imbalance: 0, empty: true };
+  }
+  return { bidDepth, askDepth, liquidity, imbalance: (bidDepth - askDepth) / (bidDepth + askDepth), empty: false };
+}
+
 export function analyzeMarket(input: EngineInput): MarketAnalysis {
   // Fail-safe wrapper - never throw, never fabricate, return NO_TRADE with reasons
   try {
@@ -92,13 +120,10 @@ function analyzeMarketInner(input: EngineInput): MarketAnalysis {
 
   // Empty book on either side → NO_TRADE (brief stop condition)
   const depthN = ANALYSIS_CONFIG.DEPTH_LEVELS; // DERIVED config, not magic
-  const topBids = bids.slice(0, depthN);
-  const topAsks = asks.slice(0, depthN);
-  const bidDepth = topBids.reduce((s, [, q]) => s + q, 0); // DERIVED
-  const askDepth = topAsks.reduce((s, [, q]) => s + q, 0); // DERIVED
-  const liquidity = bidDepth + askDepth; // DERIVED
+  const stats = computeBookStats(bids, asks, depthN);
+  const { liquidity } = stats;
 
-  if (topBids.length === 0 || topAsks.length === 0 || liquidity === 0) {
+  if (stats.empty) {
     const timeRem = timeRemaining ?? 0;
     return {
       marketId,
@@ -139,7 +164,7 @@ function analyzeMarketInner(input: EngineInput): MarketAnalysis {
   }
 
   // Compute imbalance in [-1,1]
-  const imbalance = (bidDepth - askDepth) / (bidDepth + askDepth); // DERIVED
+  const imbalance = stats.imbalance; // DERIVED - same definition as computeBookStats
   const k = ANALYSIS_CONFIG.K_IMBALANCE_NUDGE; // DERIVED config
   const estimatedProbability = computeEstimatedProbability(marketProbability, imbalance, k); // DERIVED
   const edge = estimatedProbability - marketProbability; // DERIVED

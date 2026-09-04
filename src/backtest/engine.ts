@@ -152,7 +152,7 @@ export interface HistoricalBacktestMetrics extends BacktestMetrics {
   readonly estimatedTrades: number; // trades from ESTIMATED fallback
 }
 
-function syntheticBookAround(mid: number): { bids: [number, number][]; asks: [number, number][] } {
+export function syntheticBookAround(mid: number): { bids: [number, number][]; asks: [number, number][] } {
   return {
     bids: [
       [Math.max(0.01, mid - 0.015), 200],

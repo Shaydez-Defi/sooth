@@ -1,12 +1,14 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, CheckCircle2, XCircle } from "lucide-react";
-import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, getMarketById, getMarkets, type MarketAnalysis } from "../lib/api";
+import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, getMarketById, getMarkets, type MarketAnalysis, type DecisionOutput, type DecisionGateCheck } from "../lib/api";
 import { formatMarket, formatSymbolFallback } from "../lib/formatMarket";
 import type { EChartsCoreOption } from "echarts/core";
 import { EChart } from "../components/EChart";
 import { ECHARTS_MONO, AXIS_COMMON, areaGradient, tooltipBox, hexToRgba } from "../components/chartTheme";
 import { EmptyState } from "../components/EmptyState";
+import { DecisionBadge, SignalList, OpportunityScore, FairValueComparison } from "../components/decision";
+import { summarizeEvent } from "../components/eventSummary";
 
 // Preserved verbatim from sooth-market-detail-v3.jsx - inline, not unified
 const COLOR = {
@@ -56,6 +58,72 @@ function formatClock(iso: string): string {
   } catch {
     return iso.slice(11, 16);
   }
+}
+
+function formatExpiryClock(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return "expired";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function DecisionHero({
+  analysis,
+  decision,
+  formatted,
+}: {
+  analysis: MarketAnalysis;
+  decision: DecisionOutput | null;
+  formatted: { label: string; sublabel: string; title: string } | null;
+}) {
+  const direction = analysis.direction === "YES" ? "UP" : analysis.direction === "NO" ? "DOWN" : "FLAT";
+  const dirColor = direction === "UP" ? COLOR.up : direction === "DOWN" ? COLOR.down : COLOR.muted;
+  const fair = decision ? decision.fairValue : analysis.estimatedProbability;
+  return (
+    <div className="sooth-glass-card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 17, fontWeight: 700 }} title={formatted ? formatted.title : undefined}>
+              {formatted ? formatted.label : analysis.symbol}
+            </span>
+            <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: dirColor }}>{direction}</span>
+          </div>
+          <div style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint, marginTop: 4 }}>
+            Expires in {formatExpiryClock(analysis.timeRemaining)}
+          </div>
+        </div>
+        {decision && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <OpportunityScore score={decision.opportunityScore} big />
+            <DecisionBadge decision={decision.decision} />
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 24, marginTop: 16, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontFamily: "monospace", fontSize: 34, fontWeight: 800, lineHeight: 1.1 }}>{pct(analysis.marketProbability)}</div>
+        </div>
+        <div style={{ paddingBottom: 4 }}>
+          <div style={{ fontFamily: "monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: COLOR.faint }}>Sooth</div>
+          <FairValueComparison market={analysis.marketProbability} fair={fair} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TechnicalAnalysis({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="sooth-glass-card">
+      <button className="sooth-focusable" onClick={() => setOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: 12, color: COLOR.muted, padding: 0 }}>
+        <ChevronDown size={14} color={COLOR.faint} style={{ transform: open ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}`, flexShrink: 0 }} />
+        View technical analysis
+      </button>
+      {open && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>{children}</div>}
+    </div>
+  );
 }
 
 function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | null; marketId: string; formatted: { label: string; sublabel: string; title: string } | null }) {
@@ -147,10 +215,47 @@ function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | 
   );
 }
 
-function ReasoningTrace({ analysis }: { analysis: MarketAnalysis }) {
+function ReasoningTrace({ analysis, decision, gateChecks }: { analysis: MarketAnalysis; decision: DecisionOutput | null; gateChecks: DecisionGateCheck[] }) {
   return (
     <div className="sooth-glass-card">
-      <PanelHeader>Reasoning trace - why {analysis.recommendation}</PanelHeader>
+      <PanelHeader
+        right={
+          decision ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>{decision.opportunityScore}/100</span>
+              <DecisionBadge decision={decision.decision} />
+            </span>
+          ) : undefined
+        }
+      >
+        Reasoning trace - why {analysis.recommendation}
+      </PanelHeader>
+      {decision && (
+        <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}` }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontFamily: "monospace", fontSize: 12 }}>
+            <span style={{ color: COLOR.muted }}>fair <span style={{ color: COLOR.accent }}>{pct(decision.fairValue)}</span></span>
+            <span style={{ color: COLOR.muted }}>raw <span style={{ color: COLOR.text }}>{decision.rawEdge >= 0 ? "+" : ""}{(decision.rawEdge * 100).toFixed(2)}%</span></span>
+            <span style={{ color: COLOR.muted }}>exec <span style={{ color: decision.executableEdge >= 0 ? COLOR.up : COLOR.down }}>{decision.executableEdge >= 0 ? "+" : ""}{(decision.executableEdge * 100).toFixed(2)}%</span></span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+            {decision.reasons.map((r, i) => (
+              <span key={i} style={{ fontSize: 11.5, color: COLOR.muted, lineHeight: 1.5 }}>{r}</span>
+            ))}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <SignalList signals={decision.signals} />
+          </div>
+          {gateChecks.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+              {gateChecks.map((g) => (
+                <span key={g.name} title={g.detail} style={{ fontFamily: "monospace", fontSize: 10, color: g.pass ? COLOR.up : COLOR.down, border: `1px solid ${g.pass ? COLOR.up : COLOR.down}`, borderRadius: 4, padding: "1px 6px", opacity: 0.9 }}>
+                  {g.name}: {g.pass ? "PASS" : "FAIL"}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "6px 24px" }}>
         {analysis.reasons.map((r, i) => (
           <div key={i} style={{ display: "flex", gap: 8, fontSize: 13, color: COLOR.muted, lineHeight: 1.5 }}>
@@ -378,11 +483,12 @@ function DepthChart({ bids, asks }: { bids: [number, number][]; asks: [number, n
   );
 }
 
-function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: string; marketProb: number; liquidity: number; onPlaced: () => void }) {
+function OrderEntry({ marketId, marketProb, liquidity, decision, onPlaced }: { marketId: string; marketProb: number; liquidity: number; decision: DecisionOutput | null; onPlaced: () => void }) {
   const [side, setSide] = useState<"YES" | "NO">("YES");
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [showReasons, setShowReasons] = useState(false);
 
   const amountNum = parseFloat(amount) || 0;
   const price = side === "YES" ? marketProb : 1 - marketProb;
@@ -416,6 +522,35 @@ function OrderEntry({ marketId, marketProb, liquidity, onPlaced }: { marketId: s
   return (
     <div className="sooth-glass-card">
       <PanelHeader>Place order</PanelHeader>
+      {decision ? (
+        decision.decision === "NO_TRADE" ? (
+          <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Sooth says:</span>
+              <DecisionBadge decision={decision.decision} />
+            </div>
+            <p style={{ fontSize: 12, color: COLOR.muted, margin: "8px 0 0", lineHeight: 1.5 }}>The opportunity does not survive current execution conditions.</p>
+            <button className="sooth-focusable" onClick={() => setShowReasons((v) => !v)} style={{ marginTop: 8, background: "none", border: "none", color: COLOR.accent, cursor: "pointer", fontFamily: "monospace", fontSize: 12, padding: 0 }}>
+              {showReasons ? "Hide reasons" : "View reasons"}
+            </button>
+            {showReasons && (
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                {decision.reasons.map((r, i) => (
+                  <div key={i} style={{ fontSize: 12, color: COLOR.muted, lineHeight: 1.5 }}>{r}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13 }}>
+            <span style={{ fontWeight: 600 }}>Sooth says:</span>
+            <DecisionBadge decision={decision.decision} />
+            <span style={{ fontFamily: "monospace", fontSize: 12, color: COLOR.muted }}>
+              exec {decision.executableEdge >= 0 ? "+" : ""}{(decision.executableEdge * 100).toFixed(1)}%
+            </span>
+          </div>
+        )
+      ) : null}
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {(["YES", "NO"] as const).map((s) => (
           <button key={s} className="sooth-focusable" onClick={() => setSide(s)} style={{ flex: 1, padding: "8px 0", borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${side === s ? (s === "YES" ? COLOR.up : COLOR.down) : COLOR.border}`, background: side === s ? (s === "YES" ? COLOR.up : COLOR.down) : "transparent", color: side === s ? COLOR.ink : COLOR.muted, transition: `all 150ms ${EASE}` }}>
@@ -572,7 +707,7 @@ function BottomTabs({ marketId }: { marketId: string }) {
           </div>
         )}
         {tab === "Open orders" && <div style={{ fontSize: 12, color: COLOR.faint }}>Open orders via GET /orders - requires signer. Shown in Portfolio.</div>}
-        {tab === "Backtest results" && <div style={{ fontSize: 12, color: COLOR.faint }}>Run a backtest in <Link to="/lab" style={{ color: COLOR.accent }}>Strategy Lab</Link>.</div>}
+        {tab === "Backtest results" && <div style={{ fontSize: 12, color: COLOR.faint }}>Run a backtest in <Link to="/backtest" style={{ color: COLOR.accent }}>Backtest</Link>.</div>}
         {tab !== "Positions" && tab !== "Bot events" && tab !== "Open orders" && tab !== "Backtest results" ? null : null}
       </div>
       <div style={{ display: "none" }}>{marketId}</div>
@@ -719,82 +854,6 @@ function ProbabilityChart({ marketId, analysis }: { marketId: string; analysis: 
   );
 }
 
-function summarizeEvent(eventType: string, raw: string): Array<{ k: string; v: string }> {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw) as unknown;
-  } catch {
-    return raw === "" ? [] : [{ k: "data", v: raw.slice(0, 120) }];
-  }
-  if (typeof data !== "object" || data === null) {
-    return [{ k: "value", v: String(data).slice(0, 120) }];
-  }
-  const rec = data as Record<string, unknown>;
-  const scalar = (v: unknown): string | null => {
-    if (typeof v === "string") return v.length > 120 ? `${v.slice(0, 120)}…` : v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
-    return null;
-  };
-  const at = (path: ReadonlyArray<string>): unknown => {
-    let cur: unknown = rec;
-    for (const key of path) {
-      if (typeof cur !== "object" || cur === null) return null;
-      cur = (cur as Record<string, unknown>)[key];
-    }
-    return cur ?? null;
-  };
-  const pick = (...keys: string[]): Array<{ k: string; v: string }> => {
-    const out: Array<{ k: string; v: string }> = [];
-    for (const k of keys) {
-      const s = scalar(rec[k]);
-      if (s !== null && s !== "") out.push({ k, v: s });
-    }
-    return out;
-  };
-  const firstReason = (): string | null => {
-    const reasons = at(["decision", "reasons"]);
-    if (Array.isArray(reasons) && typeof reasons[0] === "string") return reasons[0];
-    const r = at(["reason"]);
-    return typeof r === "string" ? r : null;
-  };
-  switch (eventType.toUpperCase()) {
-    case "BOT_STOP": {
-      const rows = pick("reason", "tickCount");
-      return rows.length > 0 ? rows : [{ k: "state", v: "stopped" }];
-    }
-    case "BOT_START": {
-      const rows = pick("tickCount", "reason");
-      return rows.length > 0 ? rows : [{ k: "state", v: "started" }];
-    }
-    case "EXECUTION": {
-      const rows = pick("executed", "reason", "txHash", "side", "size");
-      return rows;
-    }
-    case "RISK_CHECK": {
-      const rows = pick("skipped", "approved", "reason");
-      return rows;
-    }
-    case "STRATEGY_DECISION": {
-      const action = scalar(at(["decision", "action"]));
-      const reason = firstReason();
-      const rows: Array<{ k: string; v: string }> = [];
-      if (action) rows.push({ k: "action", v: action });
-      if (reason) rows.push({ k: "reason", v: reason });
-      return rows.length > 0 ? rows : pick("action", "reason");
-    }
-    case "MARKET_EVALUATED": {
-      const rows: Array<{ k: string; v: string }> = [];
-      const prob = at(["analysis", "marketProbability"]);
-      const edge = at(["analysis", "edge"]);
-      if (typeof prob === "number") rows.push({ k: "prob", v: pct(prob) });
-      if (typeof edge === "number") rows.push({ k: "edge", v: `${edge >= 0 ? "+" : ""}${(edge * 100).toFixed(1)}%` });
-      return rows.length > 0 ? rows : pick("marketId", "symbol");
-    }
-    default: {
-      return pick("reason", "action", "side", "size", "price", "txHash", "tickCount", "marketId", "symbol").slice(0, 3);
-    }
-  }
-}
 
 function EventLog({ marketId }: { marketId: string }) {
   const [rows, setRows] = useState<Array<{ id: number; eventType: string; createdAtIso: string; data: string; marketId: string | null; symbol: string | null }>>([]);
@@ -814,7 +873,7 @@ function EventLog({ marketId }: { marketId: string }) {
       {rows.map((e, i) => {
         const sym = (e as unknown as { symbol?: string | null }).symbol ?? (e as unknown as { marketId?: string | null }).marketId ?? null;
         const fmt = sym ? formatSymbolFallback(sym) : null;
-        const summary = summarizeEvent(e.eventType, e.data);
+        const summary = summarizeEvent(e.eventType, e.data, pct);
         return (
           <div key={e.id ?? i} style={{ display: "flex", gap: 10, padding: "8px 6px", marginLeft: -6, marginRight: -6, borderRadius: 6, borderBottom: i < rows.length - 1 ? `1px solid ${COLOR.border}` : "none", alignItems: "flex-start" }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor(e.eventType), flexShrink: 0, marginTop: 7, opacity: 0.9 }} aria-hidden="true" />
@@ -847,6 +906,8 @@ export default function MarketDetail() {
   const navState = location.state as { label?: unknown; sublabel?: unknown } | null;
   const navLabel = navState && typeof navState.label === "string" && navState.label !== "" ? navState.label : null;
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
+  const [decision, setDecision] = useState<DecisionOutput | null>(null);
+  const [gateChecks, setGateChecks] = useState<DecisionGateCheck[]>([]);
   const [bids, setBids] = useState<[number, number][]>([]);
   const [asks, setAsks] = useState<[number, number][]>([]);
   const [loading, setLoading] = useState(true);
@@ -864,6 +925,8 @@ export default function MarketDetail() {
         getMarketById(marketId).catch(() => null),
       ]);
       setAnalysis(aRes.data);
+      setDecision(aRes.decision ?? null);
+      setGateChecks(aRes.gateChecks ?? []);
       if (bookRes) {
         setBids(bookRes.data.bids as [number, number][]);
         setAsks(bookRes.data.asks as [number, number][]);
@@ -949,15 +1012,18 @@ export default function MarketDetail() {
           {!loading && analysis && (
             <div className="sooth-detail-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.65fr) 360px", gap: 16, alignItems: "start" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <TopBar analysis={analysis} marketId={marketId} formatted={formatted} />
-                <ReasoningTrace analysis={analysis} />
-                <DepthChart bids={bids} asks={asks} />
-                <ProbabilityChart marketId={marketId} analysis={analysis} />
-                <BottomTabs marketId={marketId} />
+                <DecisionHero analysis={analysis} decision={decision} formatted={formatted} />
+                <ReasoningTrace analysis={analysis} decision={decision} gateChecks={gateChecks} />
+                <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} decision={decision} onPlaced={() => void load()} />
+                <TechnicalAnalysis>
+                  <DepthChart bids={bids} asks={asks} />
+                  <ProbabilityChart marketId={marketId} analysis={analysis} />
+                  <BottomTabs marketId={marketId} />
+                </TechnicalAnalysis>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <TopBar analysis={analysis} marketId={marketId} formatted={formatted} />
                 <EventLog marketId={marketId} />
-                <OrderEntry marketId={marketId} marketProb={analysis.marketProbability} liquidity={analysis.liquidity} onPlaced={() => void load()} />
                 <AccountOverview />
               </div>
             </div>

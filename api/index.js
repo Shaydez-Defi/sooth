@@ -593,6 +593,51 @@ var ANALYSIS_CONFIG = {
   /** Minimum seconds remaining to expiry to recommend TRADE (buffer). */
   MIN_TIME_REMAINING: 300
 };
+var DECISION_CONFIG = {
+  /** WATCH bar: |rawEdge| at/above this but executableEdge below MIN_EDGE → WATCH (probability points). */
+  WATCH_MIN_EDGE: 0.01,
+  /** Spread cost: spreadPenalty = spread * this (share of spread paid on entry, 0.5 = half). */
+  SPREAD_PENALTY_FACTOR: 0.5,
+  /** Slippage cost: slipPenalty = (orderSize / liquidity) * this (probability points per fill-ratio). */
+  SLIPPAGE_FACTOR: 1,
+  /** Reference order size (shares) for the slippage penalty - mirrors backtest sizePerTrade. */
+  ORDER_SIZE_SHARES: 1,
+  /** Momentum mapping: delta = clamp(momentumRoC * gain, ±cap), momentumRoC unitless (e.g. +0.02 = +2%). */
+  MOMENTUM_GAIN: 1,
+  /** Cap on |momentum delta| in probability points. */
+  MOMENTUM_CAP: 0.03,
+  /** Dislocation mapping: delta = clamp(gap * gain, ±cap), gap in rate-of-change points. */
+  DISLOCATION_GAIN: 1,
+  /** Cap on |dislocation delta| in probability points. */
+  DISLOCATION_CAP: 0.03,
+  /** Snapshot window: use up to this many recent real snapshots for momentum/volatility. */
+  HISTORY_LOOKBACK_COUNT: 10,
+  /** Minimum real snapshots with non-null mids to compute momentum/volatility. */
+  HISTORY_MIN_SNAPSHOTS: 5,
+  /** Minimum window span (seconds, first-to-last snapshot) for momentum/volatility. */
+  HISTORY_MIN_SPAN_SEC: 120,
+  /** Opportunity score weights (normalized in code, must be non-negative). */
+  OPPORTUNITY_WEIGHTS: {
+    /** |executableEdge| scaled by SCORE_EDGE_NORMALIZER. */
+    edge: 0.35,
+    /** Share of directional contributors agreeing with edge sign. */
+    agreement: 0.2,
+    /** Liquidity scaled by SCORE_LIQUIDITY_REF. */
+    liquidity: 0.15,
+    /** Execution quality from spread (1 - spreadBps/MAX_SPREAD_BPS). */
+    execution: 0.1,
+    /** Time buffer: timeRemaining scaled by RISK_TIME_REF_SEC. */
+    risk: 0.1,
+    /** Settlement gate pass (1) or fail (0). */
+    settlement: 0.1
+  },
+  /** |executableEdge| that scores a full 1.0 on the edge component (probability points). */
+  SCORE_EDGE_NORMALIZER: 0.05,
+  /** Liquidity (shares) that scores a full 1.0 on the liquidity component. */
+  SCORE_LIQUIDITY_REF: 5e3,
+  /** timeRemaining (seconds) that scores a full 1.0 on the risk component. */
+  RISK_TIME_REF_SEC: 3600
+};
 var BOT_CONFIG = {
   /** Bot enabled. */
   ENABLED: true,
@@ -684,6 +729,17 @@ function computeEstimatedProbability(marketProbability, imbalance, k) {
 function clamp01(n) {
   return Math.min(0.99, Math.max(0.01, n));
 }
+function computeBookStats(bids, asks, depthLevels) {
+  const topBids = bids.slice(0, depthLevels);
+  const topAsks = asks.slice(0, depthLevels);
+  const bidDepth = topBids.reduce((s, [, q]) => s + q, 0);
+  const askDepth = topAsks.reduce((s, [, q]) => s + q, 0);
+  const liquidity = bidDepth + askDepth;
+  if (topBids.length === 0 || topAsks.length === 0 || liquidity === 0) {
+    return { bidDepth, askDepth, liquidity, imbalance: 0, empty: true };
+  }
+  return { bidDepth, askDepth, liquidity, imbalance: (bidDepth - askDepth) / (bidDepth + askDepth), empty: false };
+}
 function analyzeMarket(input) {
   try {
     return analyzeMarketInner(input);
@@ -728,12 +784,9 @@ function analyzeMarketInner(input) {
     };
   }
   const depthN = ANALYSIS_CONFIG.DEPTH_LEVELS;
-  const topBids = bids.slice(0, depthN);
-  const topAsks = asks.slice(0, depthN);
-  const bidDepth = topBids.reduce((s, [, q]) => s + q, 0);
-  const askDepth = topAsks.reduce((s, [, q]) => s + q, 0);
-  const liquidity = bidDepth + askDepth;
-  if (topBids.length === 0 || topAsks.length === 0 || liquidity === 0) {
+  const stats = computeBookStats(bids, asks, depthN);
+  const { liquidity } = stats;
+  if (stats.empty) {
     const timeRem2 = timeRemaining ?? 0;
     return {
       marketId,
@@ -770,7 +823,7 @@ function analyzeMarketInner(input) {
       imbalance: 0
     };
   }
-  const imbalance = (bidDepth - askDepth) / (bidDepth + askDepth);
+  const imbalance = stats.imbalance;
   const k = ANALYSIS_CONFIG.K_IMBALANCE_NUDGE;
   const estimatedProbability = computeEstimatedProbability(marketProbability, imbalance, k);
   const edge = estimatedProbability - marketProbability;
@@ -826,6 +879,506 @@ function analyzeMarketInner(input) {
     reasons,
     imbalance
   };
+}
+
+// src/analysis/dislocation.ts
+function rateOfChange(thenV, nowV) {
+  if (thenV === null || nowV === null) return null;
+  if (!Number.isFinite(thenV) || !Number.isFinite(nowV) || thenV <= 0) return null;
+  return (nowV - thenV) / thenV;
+}
+function computeDislocation(input) {
+  const underlyingRoC = rateOfChange(input.underlyingThenPrice, input.underlyingNowPrice);
+  const contractRoC = rateOfChange(input.contractThenProb, input.contractNowProb);
+  const w = input.windowSec;
+  if (underlyingRoC === null || contractRoC === null || typeof w !== "number" || !(w > 0)) {
+    const missing = [];
+    if (underlyingRoC === null) missing.push("underlying window");
+    if (contractRoC === null) missing.push("contract window");
+    if (typeof w !== "number" || !(w > 0)) missing.push("window span");
+    return {
+      sufficient: false,
+      underlyingRoC,
+      contractRoC,
+      gap: null,
+      windowSec: input.windowSec,
+      note: `dislocation N/A - missing ${missing.join(", ")}`
+    };
+  }
+  const gap = underlyingRoC - contractRoC;
+  const windowSec = w;
+  return {
+    sufficient: true,
+    underlyingRoC,
+    contractRoC,
+    gap,
+    windowSec,
+    note: `underlying ${(underlyingRoC * 100).toFixed(2)}% vs contract ${(contractRoC * 100).toFixed(2)}% over ${windowSec.toFixed(0)}s \u2192 gap ${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(2)}%`
+  };
+}
+
+// src/analysis/variables.ts
+function finite(n) {
+  return typeof n === "number" && Number.isFinite(n);
+}
+function isStrikePresent(strike) {
+  if (strike === null) return false;
+  const n = Number(strike);
+  return Number.isFinite(n) && n !== 0;
+}
+function populationStddev(values) {
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  const variance = values.reduce((s, v) => s + (v - mean) * (v - mean), 0) / values.length;
+  return Math.sqrt(variance);
+}
+function collectVariables(input) {
+  const notes = [];
+  const book = computeBookStats(input.bids, input.asks, ANALYSIS_CONFIG.DEPTH_LEVELS);
+  if (book.empty) notes.push("book empty on at least one side - imbalance/liquidity N/A");
+  const marketProbability = finite(input.marketProbability) ? input.marketProbability : null;
+  if (marketProbability === null) notes.push("marketProbability missing - fair value not computable");
+  const spread = input.bestBid !== void 0 && input.bestAsk !== void 0 && finite(input.bestBid) && finite(input.bestAsk) ? input.bestAsk - input.bestBid : null;
+  if (spread === null) notes.push("spread unknown - best bid/ask missing");
+  const spreadBps = spread !== null && marketProbability !== null && marketProbability > 0 ? spread / marketProbability * 1e4 : null;
+  const rawTime = input.timeRemaining;
+  const timeRemaining = typeof rawTime === "number" && Number.isFinite(rawTime) ? rawTime : null;
+  const mids = input.contractHistory.filter((p) => finite(p.mid) && finite(p.capturedAtUnix)).sort((a, b) => a.capturedAtUnix - b.capturedAtUnix).slice(-DECISION_CONFIG.HISTORY_LOOKBACK_COUNT);
+  let momentum = null;
+  let momentumWindowSec = null;
+  let volatility = null;
+  if (mids.length < DECISION_CONFIG.HISTORY_MIN_SNAPSHOTS) {
+    notes.push(`momentum/volatility N/A - only ${mids.length} real snapshots (need ${DECISION_CONFIG.HISTORY_MIN_SNAPSHOTS})`);
+  } else {
+    const first = mids[0];
+    const last = mids[mids.length - 1];
+    if (first === void 0 || last === void 0) {
+      notes.push("momentum/volatility N/A - window ends unreadable");
+    } else {
+      const span = last.capturedAtUnix - first.capturedAtUnix;
+      if (span < DECISION_CONFIG.HISTORY_MIN_SPAN_SEC) {
+        notes.push(`momentum/volatility N/A - window span ${span.toFixed(0)}s under ${DECISION_CONFIG.HISTORY_MIN_SPAN_SEC}s`);
+      } else if (first.mid <= 0) {
+        notes.push("momentum/volatility N/A - first window mid not positive");
+      } else {
+        momentum = (last.mid - first.mid) / first.mid;
+        momentumWindowSec = span;
+        volatility = populationStddev(mids.map((p) => p.mid));
+      }
+    }
+  }
+  const referencePrice = input.referenceNow ? input.referenceNow.price : null;
+  const referenceEma = input.referenceNow ? input.referenceNow.ema : null;
+  if (referencePrice === null) notes.push(`reference price N/A - no feed observation for ${input.asset}`);
+  const firstBar = mids.length > 0 ? mids[0] : void 0;
+  const lastBar = mids.length > 0 ? mids[mids.length - 1] : void 0;
+  const contractThen = firstBar !== void 0 ? firstBar.mid : null;
+  const contractNow = lastBar !== void 0 ? lastBar.mid : null;
+  const dis = computeDislocation({
+    underlyingThenPrice: input.referenceThen ? input.referenceThen.price : null,
+    underlyingNowPrice: referencePrice,
+    contractThenProb: contractThen,
+    contractNowProb: contractNow,
+    windowSec: momentumWindowSec
+  });
+  if (!dis.sufficient) notes.push(dis.note);
+  const strikeNum = input.strike !== null ? Number(input.strike) : NaN;
+  const strikePresent = isStrikePresent(input.strike);
+  let strikeDistancePct = null;
+  if (!strikePresent) {
+    notes.push("strike distance N/A - strike absent or zero on this market");
+  } else if (referencePrice === null) {
+    notes.push("strike distance N/A - no reference price to compare");
+  } else {
+    strikeDistancePct = (referencePrice - strikeNum) / Math.abs(strikeNum) * 100;
+  }
+  return {
+    marketId: input.marketId,
+    symbol: input.symbol,
+    asset: input.asset,
+    marketProbability,
+    spread,
+    spreadBps,
+    imbalance: book.empty ? null : book.imbalance,
+    liquidity: book.empty ? null : book.liquidity,
+    timeRemaining,
+    referencePrice,
+    referenceEma,
+    momentum,
+    momentumWindowSec,
+    momentumSamples: mids.length,
+    volatility,
+    volatilitySamples: mids.length,
+    strikeDistancePct,
+    dislocationGap: dis.gap,
+    dislocationWindowSec: dis.windowSec,
+    underlyingRoC: dis.underlyingRoC,
+    contractRoC: dis.contractRoC,
+    venueId: input.venueId ?? null,
+    expiry: typeof input.expiry === "number" && Number.isFinite(input.expiry) ? input.expiry : null,
+    onchainStatus: typeof input.onchainStatus === "number" && Number.isFinite(input.onchainStatus) ? input.onchainStatus : null,
+    strikePresent,
+    notes
+  };
+}
+
+// src/analysis/contextEngine.ts
+function clamp012(n) {
+  return Math.min(0.99, Math.max(0.01, n));
+}
+function clamp(n, lo, hi) {
+  return Math.min(hi, Math.max(lo, n));
+}
+function signed(n) {
+  return `${n >= 0 ? "+" : ""}${n.toFixed(4)}`;
+}
+function computeFairValue(v) {
+  const notes = [];
+  const contributions = [];
+  if (v.marketProbability === null) {
+    return { fairValue: null, contributions, notes: ["fair value not computable - marketProbability missing"] };
+  }
+  const base = v.marketProbability;
+  if (v.imbalance !== null) {
+    const k = ANALYSIS_CONFIG.K_IMBALANCE_NUDGE;
+    const delta = k * v.imbalance;
+    contributions.push({
+      name: "order-flow",
+      signal: v.imbalance,
+      weight: k,
+      delta,
+      detail: `order-flow imbalance ${v.imbalance.toFixed(3)} \xD7 k=${k.toFixed(3)} \u2192 ${signed(delta)}`
+    });
+  } else {
+    notes.push("order-flow skipped - no book depth");
+  }
+  if (v.momentum !== null && v.momentumWindowSec !== null) {
+    const delta = clamp(v.momentum * DECISION_CONFIG.MOMENTUM_GAIN, -DECISION_CONFIG.MOMENTUM_CAP, DECISION_CONFIG.MOMENTUM_CAP);
+    contributions.push({
+      name: "momentum",
+      signal: v.momentum,
+      weight: DECISION_CONFIG.MOMENTUM_GAIN,
+      delta,
+      detail: `momentum ${(v.momentum * 100).toFixed(2)}% over ${v.momentumWindowSec.toFixed(0)}s \xD7 gain=${DECISION_CONFIG.MOMENTUM_GAIN} (cap \xB1${DECISION_CONFIG.MOMENTUM_CAP}) \u2192 ${signed(delta)}`
+    });
+  } else {
+    notes.push("momentum skipped - insufficient snapshot history");
+  }
+  if (v.dislocationGap !== null && v.dislocationWindowSec !== null) {
+    const delta = clamp(v.dislocationGap * DECISION_CONFIG.DISLOCATION_GAIN, -DECISION_CONFIG.DISLOCATION_CAP, DECISION_CONFIG.DISLOCATION_CAP);
+    contributions.push({
+      name: "dislocation",
+      signal: v.dislocationGap,
+      weight: DECISION_CONFIG.DISLOCATION_GAIN,
+      delta,
+      detail: `repricing gap ${v.dislocationGap >= 0 ? "+" : ""}${(v.dislocationGap * 100).toFixed(2)}% over ${v.dislocationWindowSec.toFixed(0)}s \xD7 gain=${DECISION_CONFIG.DISLOCATION_GAIN} (cap \xB1${DECISION_CONFIG.DISLOCATION_CAP}) \u2192 ${signed(delta)}`
+    });
+  } else {
+    notes.push("dislocation skipped - reference or contract window unavailable");
+  }
+  if (v.strikeDistancePct !== null && v.referencePrice !== null) {
+    notes.push(`strike context: reference ${v.referencePrice} vs strike distance ${v.strikeDistancePct.toFixed(2)}% (reported, not weighted - direction unknowable from data)`);
+  }
+  if (v.volatility !== null) {
+    notes.push(`volatility context: stddev ${v.volatility.toFixed(4)} over ${v.volatilitySamples} snapshots (reported, not weighted - non-directional)`);
+  }
+  const fairValue = clamp012(base + contributions.reduce((s, c) => s + c.delta, 0));
+  return { fairValue, contributions, notes };
+}
+
+// src/analysis/settlementGate.ts
+var SETTLEMENT_BLOCKED = "TRADE BLOCKED - SETTLEMENT RISK";
+function checkSettlement(input) {
+  const checks = [];
+  checks.push({
+    name: "event-identified",
+    pass: input.marketId !== "",
+    detail: input.marketId !== "" ? `marketId ${input.marketId.slice(0, 18)}\u2026 present` : "marketId missing"
+  });
+  checks.push({
+    name: "contract-identified",
+    pass: input.symbol !== "",
+    detail: input.symbol !== "" ? `symbol ${input.symbol} present` : "symbol missing"
+  });
+  const expiry = input.expiry;
+  const expiryOk = typeof expiry === "number" && Number.isFinite(expiry) && expiry > 0;
+  checks.push({
+    name: "expiry-identified",
+    pass: expiryOk,
+    detail: expiryOk ? `expiry ${expiry.toFixed(0)} (unix)` : "expiry missing or not positive"
+  });
+  const status = input.onchainStatus;
+  const statusOk = typeof status === "number" && Number.isFinite(status);
+  checks.push({
+    name: "resolution-readable",
+    pass: statusOk,
+    detail: statusOk ? `on-chain status ${status} readable` : "on-chain status unreadable - resolution mechanism not identifiable"
+  });
+  checks.push({
+    name: "strike",
+    pass: true,
+    detail: input.strikePresent ? "strike present (context only)" : input.venueId ? `strike N/A - venue ${input.venueId.slice(0, 18)}\u2026 markets resolve without it (informational)` : "strike N/A (informational, not blocking)"
+  });
+  return { pass: checks.every((c) => c.pass), checks };
+}
+
+// src/analysis/decision.ts
+function computePenalties(spread, liquidity) {
+  const spreadPenalty = spread * DECISION_CONFIG.SPREAD_PENALTY_FACTOR;
+  const slipPenalty = DECISION_CONFIG.ORDER_SIZE_SHARES / Math.max(liquidity, 1e-9) * DECISION_CONFIG.SLIPPAGE_FACTOR;
+  return { spreadPenalty, slipPenalty };
+}
+function clamp013(n) {
+  return Math.min(1, Math.max(0, n));
+}
+function scoreOpportunity(components, weights) {
+  const keys = ["edge", "agreement", "liquidity", "execution", "risk", "settlement"];
+  let weighted = 0;
+  let total = 0;
+  for (const k of keys) {
+    const w = weights[k] ?? 0;
+    if (w < 0 || !Number.isFinite(w)) continue;
+    weighted += w * clamp013(components[k]);
+    total += w;
+  }
+  if (total <= 0) return 0;
+  return Math.round(100 * weighted / total);
+}
+function directionOf(edge) {
+  if (edge > 0) return "UP";
+  if (edge < 0) return "DOWN";
+  return "FLAT";
+}
+function buildSignals(v, fair, gate) {
+  const byName = new Map(fair.contributions.map((c) => [c.name, c.delta]));
+  const flowDelta = byName.get("order-flow");
+  const momDelta = byName.get("momentum");
+  const disDelta = byName.get("dislocation");
+  const strong = (d) => d !== void 0 && Math.abs(d) >= DECISION_CONFIG.WATCH_MIN_EDGE;
+  return [
+    {
+      name: "order-flow",
+      level: flowDelta === void 0 ? "NONE" : strong(flowDelta) ? "STRONG" : "WEAK",
+      detail: flowDelta === void 0 ? "no book depth" : `imbalance tilt ${flowDelta >= 0 ? "+" : ""}${flowDelta.toFixed(4)} ${flowDelta >= 0 ? "supports UP" : "supports DOWN"}`
+    },
+    {
+      name: "momentum",
+      level: momDelta === void 0 ? "NONE" : strong(momDelta) ? "STRONG" : "WEAK",
+      detail: momDelta === void 0 ? "insufficient snapshot history" : v.momentum !== null ? `mid ${(v.momentum * 100).toFixed(2)}% over ${(v.momentumWindowSec ?? 0).toFixed(0)}s` : "no movement read"
+    },
+    {
+      name: "dislocation",
+      level: disDelta === void 0 ? "NONE" : Math.abs(disDelta) >= DECISION_CONFIG.WATCH_MIN_EDGE ? "DETECTED" : "NONE",
+      detail: disDelta === void 0 || v.dislocationGap === null ? "no reference window" : `repricing gap ${v.dislocationGap >= 0 ? "+" : ""}${(v.dislocationGap * 100).toFixed(2)}%`
+    },
+    {
+      name: "liquidity",
+      level: v.liquidity !== null && v.liquidity >= ANALYSIS_CONFIG.MIN_LIQUIDITY ? "GOOD" : "POOR",
+      detail: v.liquidity !== null ? `${v.liquidity.toFixed(0)} shares vs min ${ANALYSIS_CONFIG.MIN_LIQUIDITY}` : "unknown"
+    },
+    {
+      name: "spread",
+      level: v.spread !== null && v.spread <= ANALYSIS_CONFIG.MAX_SPREAD && (v.spreadBps ?? Infinity) <= ANALYSIS_CONFIG.MAX_SPREAD_BPS ? "GOOD" : "POOR",
+      detail: v.spread !== null ? `${v.spread.toFixed(4)} (${Number.isFinite(v.spreadBps ?? NaN) ? v.spreadBps.toFixed(0) : "\u221E"} bps)` : "unknown"
+    },
+    {
+      name: "time",
+      level: (v.timeRemaining ?? 0) >= ANALYSIS_CONFIG.MIN_TIME_REMAINING * 2 ? "GOOD" : (v.timeRemaining ?? 0) >= ANALYSIS_CONFIG.MIN_TIME_REMAINING ? "WEAK" : "POOR",
+      detail: v.timeRemaining !== null ? `${v.timeRemaining.toFixed(0)}s to expiry` : "unknown"
+    },
+    {
+      name: "volatility",
+      level: "CONTEXT",
+      detail: v.volatility !== null ? `stddev ${v.volatility.toFixed(4)} over ${v.volatilitySamples} snapshots` : "insufficient history"
+    },
+    {
+      name: "settlement",
+      level: gate.pass ? "PASSED" : "FAILED",
+      detail: gate.pass ? "event, expiry, and on-chain state verified" : gate.checks.filter((c) => !c.pass).map((c) => c.name).join(", ")
+    },
+    {
+      name: "risk",
+      level: "PENDING",
+      detail: "runs at order placement"
+    }
+  ];
+}
+function agreementStats(rawEdge, v) {
+  const signs = [];
+  if (v.imbalance !== null && v.imbalance !== 0) signs.push(Math.sign(v.imbalance));
+  if (v.momentum !== null && v.momentum !== 0) signs.push(Math.sign(v.momentum));
+  if (v.dislocationGap !== null && v.dislocationGap !== 0) signs.push(Math.sign(v.dislocationGap));
+  if (signs.length === 0 || rawEdge === 0) return { agree: 0, total: signs.length };
+  const edgeSign = Math.sign(rawEdge);
+  return { agree: signs.filter((s) => s === edgeSign).length, total: signs.length };
+}
+function fmtSigned(n, digits = 4) {
+  return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}`;
+}
+function decideMarket(input) {
+  const { variables: v, fair, gate } = input;
+  const fail = (marketPrice2, fairValue2, rawEdge2, executableEdge2, reasons) => ({
+    decision: "NO_TRADE",
+    marketPrice: marketPrice2,
+    fairValue: fairValue2,
+    rawEdge: rawEdge2,
+    executableEdge: executableEdge2,
+    opportunityScore: 0,
+    reasons,
+    signals: []
+  });
+  if (v.marketProbability === null || !Number.isFinite(v.marketProbability)) {
+    return fail(0, 0, 0, 0, ["NO_TRADE: market price unknown - fair value not computable"]);
+  }
+  const marketPrice = v.marketProbability;
+  if (fair.fairValue === null || !Number.isFinite(fair.fairValue)) {
+    return fail(marketPrice, marketPrice, 0, 0, [
+      "NO_TRADE: fair value not computable",
+      ...v.notes.map((n) => `context: ${n}`),
+      ...fair.notes.map((n) => `context: ${n}`)
+    ]);
+  }
+  const fairValue = fair.fairValue;
+  const rawEdge = fairValue - marketPrice;
+  const dir = directionOf(rawEdge);
+  if (!gate.pass) {
+    const failed = gate.checks.filter((c) => !c.pass);
+    return fail(marketPrice, fairValue, rawEdge, rawEdge, [
+      `${SETTLEMENT_BLOCKED}: ${failed.map((c) => `${c.name} - ${c.detail}`).join("; ")}`
+    ]);
+  }
+  if (v.liquidity === null || v.liquidity < ANALYSIS_CONFIG.MIN_LIQUIDITY) {
+    return fail(marketPrice, fairValue, rawEdge, rawEdge, [
+      `NO_TRADE: liquidity ${v.liquidity === null ? "unknown" : v.liquidity.toFixed(2)} < min ${ANALYSIS_CONFIG.MIN_LIQUIDITY}`
+    ]);
+  }
+  if (v.spread === null) {
+    return fail(marketPrice, fairValue, rawEdge, rawEdge, ["NO_TRADE: spread unknown - best bid/ask missing"]);
+  }
+  const spread = v.spread;
+  const spreadBps = v.spreadBps ?? Infinity;
+  if (spread > ANALYSIS_CONFIG.MAX_SPREAD || spreadBps > ANALYSIS_CONFIG.MAX_SPREAD_BPS) {
+    return fail(marketPrice, fairValue, rawEdge, rawEdge, [
+      `NO_TRADE: spread ${spread.toFixed(4)} (${Number.isFinite(spreadBps) ? spreadBps.toFixed(1) : "\u221E"} bps) > max ${ANALYSIS_CONFIG.MAX_SPREAD.toFixed(4)} (${ANALYSIS_CONFIG.MAX_SPREAD_BPS} bps)`
+    ]);
+  }
+  const timeRem = v.timeRemaining ?? 0;
+  if (timeRem < ANALYSIS_CONFIG.MIN_TIME_REMAINING) {
+    return fail(marketPrice, fairValue, rawEdge, rawEdge, [
+      `NO_TRADE: timeRemaining ${timeRem.toFixed(0)}s < buffer ${ANALYSIS_CONFIG.MIN_TIME_REMAINING}s`
+    ]);
+  }
+  const { spreadPenalty, slipPenalty } = computePenalties(spread, v.liquidity);
+  const executableEdge = rawEdge - Math.sign(rawEdge) * (spreadPenalty + slipPenalty);
+  const { agree, total } = agreementStats(rawEdge, v);
+  const components = {
+    edge: Math.abs(executableEdge) / DECISION_CONFIG.SCORE_EDGE_NORMALIZER,
+    agreement: total > 0 ? agree / total : 0,
+    liquidity: v.liquidity / DECISION_CONFIG.SCORE_LIQUIDITY_REF,
+    execution: 1 - spreadBps / ANALYSIS_CONFIG.MAX_SPREAD_BPS,
+    risk: timeRem / DECISION_CONFIG.RISK_TIME_REF_SEC,
+    settlement: 1
+  };
+  const opportunityScore = scoreOpportunity(components, { ...DECISION_CONFIG.OPPORTUNITY_WEIGHTS });
+  const contributionLines = fair.contributions.map(
+    (c) => `${c.name}: ${c.detail} (supports ${directionOf(c.delta)})`
+  );
+  const scoreLine = `opportunity ${opportunityScore}/100 from edge|agree|liq|exec|risk|settle = ${components.edge.toFixed(2)}|${components.agreement.toFixed(2)}|${components.liquidity.toFixed(2)}|${components.execution.toFixed(2)}|${components.risk.toFixed(2)}|${components.settlement.toFixed(2)} (agree ${agree}/${total})`;
+  if (Math.abs(executableEdge) >= ANALYSIS_CONFIG.MIN_EDGE) {
+    return {
+      decision: "TRADE",
+      marketPrice,
+      fairValue,
+      rawEdge,
+      executableEdge,
+      opportunityScore,
+      signals: buildSignals(v, fair, gate),
+      reasons: [
+        `TRADE ${dir}: executable edge ${fmtSigned(executableEdge)} \u2265 minEdge ${ANALYSIS_CONFIG.MIN_EDGE.toFixed(4)} (raw ${fmtSigned(rawEdge)} minus spread cost ${spreadPenalty.toFixed(4)} and slippage cost ${slipPenalty.toFixed(4)})`,
+        ...contributionLines,
+        scoreLine
+      ]
+    };
+  }
+  if (Math.abs(rawEdge) >= DECISION_CONFIG.WATCH_MIN_EDGE) {
+    return {
+      decision: "WATCH",
+      marketPrice,
+      fairValue,
+      rawEdge,
+      executableEdge,
+      opportunityScore,
+      signals: buildSignals(v, fair, gate),
+      reasons: [
+        `WATCH ${dir}: raw edge ${fmtSigned(rawEdge)} exists but executable ${fmtSigned(executableEdge)} below minEdge ${ANALYSIS_CONFIG.MIN_EDGE.toFixed(4)} (costs ${spreadPenalty.toFixed(4)} + ${slipPenalty.toFixed(4)})`,
+        ...contributionLines,
+        scoreLine
+      ]
+    };
+  }
+  return {
+    decision: "NO_TRADE",
+    marketPrice,
+    fairValue,
+    rawEdge,
+    executableEdge,
+    opportunityScore,
+    signals: buildSignals(v, fair, gate),
+    reasons: [
+      `NO_TRADE: edge ${fmtSigned(rawEdge)} (|${Math.abs(rawEdge).toFixed(4)}|) < watch bar ${DECISION_CONFIG.WATCH_MIN_EDGE.toFixed(4)}`,
+      ...contributionLines,
+      scoreLine
+    ]
+  };
+}
+
+// src/analysis/referenceFeed.ts
+function isFinitePrice(v) {
+  return typeof v === "number" && Number.isFinite(v) && v > 0;
+}
+async function fetchReferenceNow(ctx, asset) {
+  const normalized = asset.trim().toUpperCase();
+  if (normalized === "") return null;
+  try {
+    const p = await ctx.exchange.client.fetchPrice(normalized);
+    if (!p || !isFinitePrice(p.price)) return null;
+    return {
+      asset: normalized,
+      price: p.price,
+      ema: typeof p.ema === "number" && Number.isFinite(p.ema) && p.ema > 0 ? p.ema : null,
+      blockTimestamp: typeof p.blockTimestamp === "number" && Number.isFinite(p.blockTimestamp) ? p.blockTimestamp : null
+    };
+  } catch {
+    return null;
+  }
+}
+function nearestReferenceTick(ticks, t) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const tick of ticks) {
+    const d = Math.abs(tick.atUnix - t);
+    if (d < bestDist) {
+      bestDist = d;
+      best = tick;
+    }
+  }
+  return best;
+}
+async function fetchReferenceWindow(ctx, asset, fromUnix, toUnix, limit = 500) {
+  const normalized = asset.trim().toUpperCase();
+  if (normalized === "" || !Number.isFinite(fromUnix) || !Number.isFinite(toUnix) || toUnix <= fromUnix) return [];
+  try {
+    const ticks = await ctx.exchange.client.fetchPriceHistory(normalized, { limit, from: Math.floor(fromUnix), to: Math.floor(toUnix) });
+    const out = [];
+    for (const t of ticks) {
+      if (!isFinitePrice(t.price)) continue;
+      if (typeof t.blockTimestamp !== "number" || !Number.isFinite(t.blockTimestamp)) continue;
+      out.push({ price: t.price, atUnix: t.blockTimestamp });
+    }
+    out.sort((a, b) => a.atUnix - b.atUnix);
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 // src/snapshots/db.ts
@@ -963,6 +1516,9 @@ function initDb(db) {
     } catch {
     }
   }
+}
+function recentSnapshotsForMarket(db, marketId, limit = 10) {
+  return db.prepare("SELECT * FROM snapshots WHERE marketId=? ORDER BY capturedAtUnix DESC, id DESC LIMIT ?").all(marketId, limit);
 }
 function insertBotEvent(db, params) {
   const nowUnix = Math.floor(Date.now() / 1e3);
@@ -1220,7 +1776,72 @@ async function registerMarketRoutes(fastify) {
         marketProbability: mid ?? void 0,
         timeRemaining
       });
-      return reply.send({ data: analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } });
+      let decision = null;
+      let gateChecks = [];
+      try {
+        const meta = found.info;
+        const asset = typeof meta.asset === "string" && meta.asset !== "" ? meta.asset : "UNKNOWN";
+        const strike = meta.strike !== void 0 && meta.strike !== null ? String(meta.strike) : null;
+        const snapshotDb = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
+        let history = [];
+        try {
+          history = recentSnapshotsForMarket(snapshotDb, String(info.marketId), DECISION_CONFIG.HISTORY_LOOKBACK_COUNT).filter((s) => s.mid !== null).map((s) => ({ mid: s.mid, capturedAtUnix: s.capturedAtUnix }));
+        } finally {
+          snapshotDb.close();
+        }
+        const referenceNow = await fetchReferenceNow(ctx, asset);
+        let windowNow = referenceNow;
+        let referenceThen = null;
+        if (history.length > 0) {
+          const times = history.map((h) => h.capturedAtUnix);
+          const ticks = await fetchReferenceWindow(ctx, asset, Math.min(...times), Math.max(...times));
+          if (ticks.length > 0) {
+            const firstTick = nearestReferenceTick(ticks, Math.min(...times));
+            const lastTick = nearestReferenceTick(ticks, Math.max(...times));
+            if (firstTick) referenceThen = firstTick;
+            if (lastTick) windowNow = { asset, price: lastTick.price, ema: null, blockTimestamp: lastTick.atUnix };
+          }
+        }
+        const expiryNum = Number(onchain.expiry);
+        const statusNum = onchain.status;
+        const variables = collectVariables({
+          marketId: String(info.marketId),
+          symbol: found.symbol,
+          asset,
+          strike,
+          venueId: ctx.config.venueId ?? null,
+          expiry: Number.isFinite(expiryNum) ? expiryNum : null,
+          onchainStatus: statusNum,
+          bids,
+          asks,
+          bestBid,
+          bestAsk,
+          marketProbability: mid ?? void 0,
+          timeRemaining,
+          referenceNow: windowNow,
+          referenceThen,
+          contractHistory: history
+        });
+        const fair = computeFairValue(variables);
+        const gate = checkSettlement({
+          marketId: String(info.marketId),
+          symbol: found.symbol,
+          expiry: Number.isFinite(expiryNum) ? expiryNum : null,
+          venueId: ctx.config.venueId ?? null,
+          onchainStatus: statusNum,
+          strikePresent: isStrikePresent(strike)
+        });
+        decision = decideMarket({ variables, fair, gate });
+        gateChecks = gate.checks;
+      } catch (err) {
+        request.log.warn(`decision layer failed, serving analysis only: ${err.message}`);
+      }
+      return reply.send({
+        data: analysis,
+        dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" },
+        decision,
+        gateChecks
+      });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets/:id/analysis failed: ${err.message}`, dataIntegrity: "DERIVED" });
     }
@@ -1797,6 +2418,72 @@ async function registerOrderRoutes(fastify) {
   });
 }
 
+// src/backtest/historicalBooks.ts
+function loadHistoriesForSettledMarkets(db, settledMarkets2) {
+  const histories = [];
+  let withHistory = 0;
+  let withoutHistory = 0;
+  const stmt = db.prepare(
+    "SELECT capturedAtUnix, capturedAtIso, bidLevels, askLevels, mid, bidDepth, askDepth, imbalance, blockNumber FROM snapshots WHERE marketId=? AND capturedAtUnix < ? ORDER BY capturedAtUnix ASC, id ASC"
+  );
+  for (const m of settledMarkets2) {
+    const rows = stmt.all(m.marketId, m.expiry);
+    if (rows.length > 0) {
+      withHistory += 1;
+      const snapshots = rows.map((r) => {
+        let bids;
+        let asks;
+        try {
+          bids = JSON.parse(r.bidLevels);
+        } catch {
+          bids = [];
+        }
+        try {
+          asks = JSON.parse(r.askLevels);
+        } catch {
+          asks = [];
+        }
+        return {
+          capturedAtUnix: r.capturedAtUnix,
+          capturedAtIso: r.capturedAtIso,
+          bids,
+          asks,
+          mid: r.mid,
+          bidDepth: r.bidDepth,
+          askDepth: r.askDepth,
+          imbalance: r.imbalance,
+          blockNumber: r.blockNumber
+        };
+      });
+      histories.push({
+        marketId: m.marketId,
+        symbol: m.symbol,
+        expiry: m.expiry,
+        winningOutcome: m.winningOutcome,
+        voided: m.voided,
+        lastPrice: m.lastPrice,
+        snapshots,
+        snapshotCount: snapshots.length,
+        dataPath: "HISTORICAL"
+      });
+    } else {
+      withoutHistory += 1;
+      histories.push({
+        marketId: m.marketId,
+        symbol: m.symbol,
+        expiry: m.expiry,
+        winningOutcome: m.winningOutcome,
+        voided: m.voided,
+        lastPrice: m.lastPrice,
+        snapshots: [],
+        snapshotCount: 0,
+        dataPath: "ESTIMATED"
+      });
+    }
+  }
+  return { histories, withHistory, withoutHistory };
+}
+
 // src/backtest/engine.ts
 function computePnL(params) {
   const { direction, entryPrice, size, winningOutcome, voided } = params;
@@ -1812,6 +2499,20 @@ function computePnL(params) {
   } else {
     return won ? (1 - entryPrice) * size : -entryPrice * size;
   }
+}
+function syntheticBookAround(mid) {
+  return {
+    bids: [
+      [Math.max(0.01, mid - 0.015), 200],
+      [Math.max(0.01, mid - 0.025), 330],
+      [Math.max(0.01, mid - 0.035), 460]
+    ],
+    asks: [
+      [Math.min(0.99, mid + 0.015), 200],
+      [Math.min(0.99, mid + 0.025), 330],
+      [Math.min(0.99, mid + 0.035), 460]
+    ]
+  };
 }
 function runBacktest(params) {
   const { markets, startingCapital, sizePerTrade = 1 } = params;
@@ -1897,6 +2598,226 @@ function runBacktest(params) {
   };
 }
 
+// src/backtest/decisionReport.ts
+function bucketRejection(decision, firstReason) {
+  if (decision === "WATCH") return "watch-below-trade-bar";
+  const r = firstReason.toLowerCase();
+  if (r.includes("liquidity")) return "liquidity";
+  if (r.includes("spread")) return "spread";
+  if (r.includes("timeremaining") || r.includes("expir")) return "expiry";
+  if (r.includes("blocked") || r.includes("settlement")) return "settlement";
+  if (r.includes("watch bar") || r.includes("below threshold")) return "edge-below-threshold";
+  if (r.includes("fair value") || r.includes("market price unknown")) return "no-fair-value";
+  return "other";
+}
+function evaluateDecisions(markets) {
+  const rejectionReasons = {};
+  const predictions = [];
+  let snapshotsEvaluated = 0;
+  let tradesTaken = 0;
+  let tradeSignalSnapshots = 0;
+  let watchSnapshots = 0;
+  let noTradeSnapshots = 0;
+  let insufficientHistory = 0;
+  let unevaluated = 0;
+  let totalPnL = 0;
+  let execEdgeSum = 0;
+  let realizedEdgeSum = 0;
+  let realizedEdgeCount = 0;
+  let wins = 0;
+  let decidedOutcomes = 0;
+  const bump = (bucket) => {
+    rejectionReasons[bucket] = (rejectionReasons[bucket] ?? 0) + 1;
+  };
+  for (const m of markets) {
+    const snaps = [...m.snapshots].sort((a, b) => a.capturedAtUnix - b.capturedAtUnix);
+    if (snaps.length < DECISION_CONFIG.HISTORY_MIN_SNAPSHOTS) insufficientHistory += 1;
+    const points = snaps.length > 0 ? snaps.map((s) => ({ atUnix: s.capturedAtUnix, bids: s.bids, asks: s.asks, mid: s.mid })) : m.fallbackBook ? [{ atUnix: m.expiry - 3600, bids: m.fallbackBook.bids, asks: m.fallbackBook.asks, mid: null }] : [];
+    if (points.length === 0) {
+      unevaluated += 1;
+      continue;
+    }
+    const firstPt = points[0];
+    if (firstPt === void 0) {
+      unevaluated += 1;
+      continue;
+    }
+    const firstAt = firstPt.atUnix;
+    let taken = false;
+    const history = [];
+    for (const pt of points) {
+      if (pt.mid !== null && Number.isFinite(pt.mid)) history.push({ mid: pt.mid, capturedAtUnix: pt.atUnix });
+      const [firstBid] = pt.bids;
+      const [firstAsk] = pt.asks;
+      const bestBid = firstBid?.[0];
+      const bestAsk = firstAsk?.[0];
+      const mid = bestBid !== void 0 && bestAsk !== void 0 ? (bestBid + bestAsk) / 2 : pt.mid ?? void 0;
+      const refThen = nearestReferenceTick(m.referenceTicks, firstAt);
+      const refNow = nearestReferenceTick(m.referenceTicks, pt.atUnix);
+      const variables = collectVariables({
+        marketId: m.marketId,
+        symbol: m.symbol,
+        asset: m.asset,
+        strike: null,
+        // settled metas carry no strike - N/A, never invented
+        venueId: null,
+        expiry: m.expiry,
+        // Gate encoding (documented, not invented): a recorded winningOutcome proves
+        // on-chain resolution (status Resolved=4); voided proves Voided=5; neither
+        // means resolution is unverifiable here, so the gate honestly blocks.
+        onchainStatus: m.voided ? 5 : m.winningOutcome !== null ? 4 : null,
+        bids: pt.bids,
+        asks: pt.asks,
+        bestBid,
+        bestAsk,
+        marketProbability: mid,
+        timeRemaining: m.expiry - pt.atUnix,
+        referenceNow: refNow ? { asset: m.referenceAsset ?? "?", price: refNow.price, ema: null, blockTimestamp: refNow.atUnix } : null,
+        referenceThen: refThen,
+        contractHistory: history
+      });
+      const fair = computeFairValue(variables);
+      const gate = checkSettlement({
+        marketId: m.marketId,
+        symbol: m.symbol,
+        expiry: m.expiry,
+        venueId: null,
+        onchainStatus: m.voided ? 5 : m.winningOutcome !== null ? 4 : null,
+        strikePresent: false
+      });
+      const out = decideMarket({ variables, fair, gate });
+      snapshotsEvaluated += 1;
+      if (out.decision === "TRADE") {
+        tradeSignalSnapshots += 1;
+        if (!taken) {
+          taken = true;
+          tradesTaken += 1;
+          const predicted = out.executableEdge > 0 ? "YES" : "NO";
+          const entryPrice = predicted === "YES" ? out.marketPrice : 1 - out.marketPrice;
+          const pnl = computePnL({ direction: predicted, entryPrice, size: DECISION_CONFIG.ORDER_SIZE_SHARES, winningOutcome: m.winningOutcome, voided: m.voided });
+          totalPnL += pnl;
+          execEdgeSum += Math.abs(out.executableEdge);
+          const actual = m.voided ? "VOID" : m.winningOutcome === 0 ? "YES" : m.winningOutcome === 1 ? "NO" : "UNKNOWN";
+          const correct = actual === "UNKNOWN" ? null : actual === predicted;
+          let realizedEdge = null;
+          if (actual !== "UNKNOWN") {
+            const actualProb = actual === "VOID" ? 0.5 : actual === "YES" ? 1 : 0;
+            realizedEdge = predicted === "YES" ? actualProb - entryPrice : 1 - actualProb - entryPrice;
+            realizedEdgeSum += realizedEdge;
+            realizedEdgeCount += 1;
+          }
+          if (correct !== null) {
+            decidedOutcomes += 1;
+            if (correct) wins += 1;
+          }
+          predictions.push({ marketId: m.marketId, symbol: m.symbol, predicted, entryPrice, executableEdge: out.executableEdge, actual, correct, realizedEdge, pnl, bookTag: m.bookTag });
+        }
+      } else if (out.decision === "WATCH") {
+        watchSnapshots += 1;
+        bump(bucketRejection(out.decision, out.reasons[0] ?? ""));
+      } else {
+        noTradeSnapshots += 1;
+        bump(bucketRejection(out.decision, out.reasons[0] ?? ""));
+      }
+    }
+  }
+  return {
+    marketsEvaluated: markets.length - unevaluated,
+    snapshotsEvaluated,
+    tradesTaken,
+    tradeSignalSnapshots,
+    watchSnapshots,
+    noTradeSnapshots,
+    rejectionReasons,
+    predictions,
+    realizedEdgeAvg: realizedEdgeCount > 0 ? realizedEdgeSum / realizedEdgeCount : null,
+    avgExecutableEdge: tradesTaken > 0 ? execEdgeSum / tradesTaken : null,
+    totalPnL,
+    winRate: decidedOutcomes > 0 ? wins / decidedOutcomes : null,
+    insufficientHistory,
+    unevaluated
+  };
+}
+
+// src/backtest/decisionInputs.ts
+function rawPriceToProb(raw, decimals = 6) {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return n / 10 ** decimals;
+}
+function isoDay(expiry) {
+  return new Date(expiry * 1e3).toISOString().slice(0, 10);
+}
+function settledMetasFromRows(rows) {
+  return rows.map((r) => {
+    const marketId = String(r.marketId);
+    const asset = typeof r.asset === "string" ? r.asset : "UNK";
+    const interval = typeof r.interval === "string" ? r.interval : typeof r.intervalSec === "number" ? r.intervalSec : "?";
+    const expiryNum = Number(r.expiry ?? 0);
+    const expiry = Number.isFinite(expiryNum) ? expiryNum : 0;
+    const decimals = typeof r.baseDecimals === "number" ? r.baseDecimals : 6;
+    return {
+      marketId,
+      symbol: `${asset}-${interval}-${isoDay(expiry)}`,
+      expiry,
+      winningOutcome: typeof r.winningOutcome === "number" ? r.winningOutcome : null,
+      voided: Boolean(r.voided),
+      lastPrice: rawPriceToProb(typeof r.lastPrice === "string" ? r.lastPrice : null, decimals)
+    };
+  });
+}
+function assetOf(symbol) {
+  const head = symbol.split("-")[0];
+  return head !== void 0 && head !== "" ? head : "?";
+}
+async function buildDecisionInputs(histories, getTicks) {
+  const out = [];
+  for (const h of histories) {
+    const asset = assetOf(h.symbol);
+    if (h.snapshots.length > 0) {
+      const times = h.snapshots.map((s) => s.capturedAtUnix);
+      const from = Math.min(...times);
+      const to = Math.max(...times);
+      let ticks = [];
+      try {
+        ticks = await getTicks(asset, from, to);
+      } catch {
+        ticks = [];
+      }
+      out.push({
+        marketId: h.marketId,
+        symbol: h.symbol,
+        asset,
+        expiry: h.expiry,
+        winningOutcome: h.winningOutcome,
+        voided: h.voided,
+        snapshots: h.snapshots.map((s) => ({ capturedAtUnix: s.capturedAtUnix, bids: s.bids, asks: s.asks, mid: s.mid })),
+        fallbackBook: null,
+        referenceTicks: ticks,
+        referenceAsset: ticks.length > 0 ? asset : null,
+        bookTag: "HISTORICAL"
+      });
+    } else {
+      const book = syntheticBookAround(h.lastPrice ?? 0.5);
+      out.push({
+        marketId: h.marketId,
+        symbol: h.symbol,
+        asset,
+        expiry: h.expiry,
+        winningOutcome: h.winningOutcome,
+        voided: h.voided,
+        snapshots: [],
+        fallbackBook: book,
+        referenceTicks: [],
+        referenceAsset: null,
+        bookTag: "ESTIMATED"
+      });
+    }
+  }
+  return out;
+}
+
 // src/api/routes/strategies.ts
 async function registerStrategyRoutes(fastify) {
   fastify.post("/strategies/analyze", async (request, reply) => {
@@ -1943,7 +2864,41 @@ async function registerStrategyRoutes(fastify) {
           marketProbability: mid ?? void 0,
           timeRemaining
         });
-        results.push({ marketId: String(info.marketId), symbol: m.symbol, analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } });
+        const meta = m.info;
+        const assetName = typeof meta.asset === "string" && meta.asset !== "" ? meta.asset : "?";
+        const strikeVal = meta.strike !== void 0 && meta.strike !== null ? String(meta.strike) : null;
+        const expiryNum = Number(onchain.expiry);
+        const decisionVariables = collectVariables({
+          marketId: String(info.marketId),
+          symbol: m.symbol,
+          asset: assetName,
+          strike: strikeVal,
+          venueId: ctx.config.venueId ?? null,
+          expiry: Number.isFinite(expiryNum) ? expiryNum : null,
+          onchainStatus: onchain.status,
+          bids,
+          asks,
+          bestBid,
+          bestAsk,
+          marketProbability: mid ?? void 0,
+          timeRemaining,
+          referenceNow: null,
+          referenceThen: null,
+          contractHistory: []
+        });
+        const decision = decideMarket({
+          variables: decisionVariables,
+          fair: computeFairValue(decisionVariables),
+          gate: checkSettlement({
+            marketId: String(info.marketId),
+            symbol: m.symbol,
+            expiry: Number.isFinite(expiryNum) ? expiryNum : null,
+            venueId: ctx.config.venueId ?? null,
+            onchainStatus: onchain.status,
+            strikePresent: isStrikePresent(strikeVal)
+          })
+        });
+        results.push({ marketId: String(info.marketId), symbol: m.symbol, analysis, decision, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } });
       }
       return reply.send({ data: results, dataIntegrity: "DERIVED on LIVE_INDEXER/LIVE_ONCHAIN", count: results.length, cacheAgeSec, stale });
     } catch (err) {
@@ -1989,12 +2944,12 @@ async function registerStrategyRoutes(fastify) {
       }
     }
     try {
-      let rawPriceToProb2 = function(raw, decimals = 6) {
+      let rawPriceToProb3 = function(raw, decimals = 6) {
         if (!raw) return null;
         const n = Number(raw);
         if (!Number.isFinite(n)) return null;
         return n / 10 ** decimals;
-      }, syntheticBookAround2 = function(mid) {
+      }, syntheticBookAround3 = function(mid) {
         return {
           bids: [
             [Math.max(0.01, mid - 0.015), 200],
@@ -2008,7 +2963,7 @@ async function registerStrategyRoutes(fastify) {
           ]
         };
       };
-      var rawPriceToProb = rawPriceToProb2, syntheticBookAround = syntheticBookAround2;
+      var rawPriceToProb2 = rawPriceToProb3, syntheticBookAround2 = syntheticBookAround3;
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = createExchange({ withSigner: false });
@@ -2022,9 +2977,9 @@ async function registerStrategyRoutes(fastify) {
       for (const r of rows) {
         const marketId = r.marketId;
         const symbol = `${r.asset ?? "UNK"}-${r.interval ?? r.intervalSec ?? "?"}-${new Date(Number(r.expiry) * 1e3).toISOString().slice(0, 10)}`;
-        const lastProb = rawPriceToProb2(r.lastPrice, r.baseDecimals ?? 6);
+        const lastProb = rawPriceToProb3(r.lastPrice, r.baseDecimals ?? 6);
         const mid = lastProb ?? 0.5;
-        const { bids, asks } = syntheticBookAround2(mid);
+        const { bids, asks } = syntheticBookAround3(mid);
         const winningOutcome = r.winningOutcome ?? null;
         const voided = Boolean(r.voided);
         markets.push({
@@ -2053,6 +3008,57 @@ async function registerStrategyRoutes(fastify) {
           ANALYSIS_CONFIG[k] = v;
         }
       }
+    }
+  });
+  fastify.post("/strategies/decision-report", async (request, reply) => {
+    const body = request.body;
+    if (body !== void 0 && typeof body !== "object") {
+      return reply.status(400).send({ error: "body must be object if provided", dataIntegrity: "DERIVED" });
+    }
+    const limit = body?.limit !== void 0 ? Number(body.limit) : 20;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      return reply.status(400).send({ error: "limit must be integer in [1,50]", dataIntegrity: "DERIVED" });
+    }
+    const startingCapital = body?.startingCapital !== void 0 ? Number(body.startingCapital) : 1e3;
+    if (!Number.isFinite(startingCapital) || startingCapital <= 0) {
+      return reply.status(400).send({ error: "startingCapital must be positive number", dataIntegrity: "DERIVED" });
+    }
+    const sizePerTrade = body?.sizePerTrade !== void 0 ? Number(body.sizePerTrade) : 1;
+    if (!Number.isFinite(sizePerTrade) || sizePerTrade <= 0) {
+      return reply.status(400).send({ error: "sizePerTrade must be positive number", dataIntegrity: "DERIVED" });
+    }
+    try {
+      if (!process.env.NETWORK) process.env.NETWORK = "testnet";
+      if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
+      const ctx = createExchange({ withSigner: false });
+      try {
+        const venueId = ctx.config.venueId;
+        const rows = await ctx.exchange.client.listBinaryMarkets({ venueId, status: "Finalized", limit });
+        if (rows.length === 0) {
+          return reply.send({
+            data: { report: null, note: "no settled markets - insufficient-data (fresh venue)", dataIntegrity: "HISTORICAL" },
+            dataIntegrity: "HISTORICAL/DERIVED"
+          });
+        }
+        const metas = settledMetasFromRows(rows);
+        const snapshotDb = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
+        let histories;
+        try {
+          histories = loadHistoriesForSettledMarkets(snapshotDb, metas).histories;
+        } finally {
+          snapshotDb.close();
+        }
+        const inputs = await buildDecisionInputs(histories, (asset, from, to) => fetchReferenceWindow(ctx, asset, from, to));
+        const report = evaluateDecisions(inputs);
+        return reply.send({
+          data: { report, count: rows.length, startingCapital, sizePerTrade, dataIntegrity: "HISTORICAL/DERIVED" },
+          dataIntegrity: "HISTORICAL/DERIVED"
+        });
+      } finally {
+        await ctx.exchange.close().catch(() => void 0);
+      }
+    } catch (err) {
+      return reply.status(500).send({ error: `POST /strategies/decision-report failed: ${err.message}`, dataIntegrity: "DERIVED" });
     }
   });
 }

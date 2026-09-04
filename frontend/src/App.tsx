@@ -9,9 +9,10 @@ import { shortAddress } from "./lib/somnia-chain";
 import Landing from "./screens/Landing";
 import Markets from "./screens/Markets";
 import MarketDetail from "./screens/MarketDetail";
-import StrategyLab from "./screens/StrategyLab";
-import Portfolio from "./screens/Portfolio";
-import Bots from "./screens/Bots";
+import Intelligence from "./screens/Intelligence";
+import Positions from "./screens/Positions";
+import History from "./screens/History";
+import Backtest from "./screens/Backtest";
 import Docs from "./screens/Docs";
 
 function TopNav() {
@@ -35,11 +36,12 @@ function TopNav() {
           <OrbMark size={20} />
           <span style={{ fontWeight: 700, fontSize: 14 }}>SOOTH</span>
         </Link>
-        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <NavLink to="/markets" style={({ isActive }) => activeStyle(isActive)}>Markets</NavLink>
-          <NavLink to="/lab" style={({ isActive }) => activeStyle(isActive)}>Strategy Lab</NavLink>
-          <NavLink to="/portfolio" style={({ isActive }) => activeStyle(isActive)}>Portfolio</NavLink>
-          <NavLink to="/bots" style={({ isActive }) => activeStyle(isActive)}>Bots</NavLink>
+          <NavLink to="/intelligence" style={({ isActive }) => activeStyle(isActive)}>Intelligence</NavLink>
+          <NavLink to="/positions" style={({ isActive }) => activeStyle(isActive)}>Positions</NavLink>
+          <NavLink to="/history" style={({ isActive }) => activeStyle(isActive)}>History</NavLink>
+          <NavLink to="/backtest" style={({ isActive }) => activeStyle(isActive)}>Backtest</NavLink>
           <NavLink to="/docs" style={({ isActive }) => activeStyle(isActive)}>Docs</NavLink>
         </div>
         <button onClick={() => setWalletOpen(true)} style={{ background: address ? COLOR.surface2 : COLOR.accent, color: address ? COLOR.text : COLOR.ink, border: address ? `1px solid ${COLOR.border}` : "none", borderRadius: 6, padding: "8px 14px", fontWeight: 600, cursor: "pointer", fontFamily: address ? "monospace" : "inherit", fontSize: 13 }}>
@@ -67,9 +69,10 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/markets" element={<Markets />} />
         <Route path="/markets/:id" element={<MarketDetail />} />
-        <Route path="/lab" element={<StrategyLab />} />
-        <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/bots" element={<Bots />} />
+        <Route path="/intelligence" element={<Intelligence />} />
+        <Route path="/positions" element={<Positions />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/backtest" element={<Backtest />} />
         <Route path="/docs" element={<Docs />} />
         <Route path="*" element={<div style={{ background: COLOR.ink, color: COLOR.text, minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}><p>Not found</p><Link to="/markets" style={{ color: COLOR.accent }}>Go to markets</Link></div>} />
       </Routes>

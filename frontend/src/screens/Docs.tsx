@@ -50,9 +50,9 @@ const USER_SECTIONS: readonly Section[] = [
     label: "act",
     title: "Do things",
     lines: [
-      "Strategy Lab scores one market or all of them, and replays settled history as backtests.",
-      "Portfolio shows equity, total P and L, positions, and bot performance.",
-      "Bots runs one bot, id default. Start it, stop it, watch ticks and events.",
+      "Backtest replays settled history as decision reports.",
+      "Positions shows open trades with live values. History shows settled outcomes and the decision log.",
+      "Intelligence watches every market and surfaces the top opportunity plus the bot loop.",
       "Backtests on a fresh venue show zero trades. That is the engine refusing to lie, not a bug.",
     ],
   },

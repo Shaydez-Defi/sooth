@@ -55,6 +55,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <WalletProvider>
+      <style>{`
+        * { scrollbar-width: thin; scrollbar-color: ${COLOR.border} transparent; }
+        *::-webkit-scrollbar { width: 8px; height: 8px; }
+        *::-webkit-scrollbar-track { background: transparent; }
+        *::-webkit-scrollbar-thumb { background: ${COLOR.border}; border-radius: 4px; }
+        *::-webkit-scrollbar-thumb:hover { background: ${COLOR.faint}; }
+      `}</style>
       <TopNav />
       <Routes>
         <Route path="/" element={<Landing />} />

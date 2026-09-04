@@ -87,7 +87,7 @@ function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | 
   };
 
   return (
-    <div className="sooth-glass-card" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+    <div className="sooth-glass-card" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, zIndex: open ? 30 : undefined }}>
       <div style={{ position: "relative" }}>
         <button className="sooth-focusable" onClick={toggle} title={formatted ? formatted.title : marketId} style={{ display: "flex", alignItems: "center", gap: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}`, borderRadius: 8, padding: "8px 14px", color: COLOR.text, fontFamily: "monospace", fontSize: 13, cursor: "pointer", maxWidth: 360, textAlign: "left" }}>
           <span style={{ minWidth: 0 }}>

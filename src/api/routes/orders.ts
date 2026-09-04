@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unnecessary-type-assertion */
 import type { FastifyInstance } from "fastify";
 import { createExchange, activeMarkets, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
+import { findMarketById } from "../registryCache.js";
 import { placeRestingOrder, cancelOrderLifecycle, createOrderState, readBalancesTagged } from "../../ec/orderLifecycle.js";
 import { checkOrder } from "../../risk/riskEngine.js";
 import { openSnapshotDb, getBotPositions, getTotalRealizedPnL } from "../../snapshots/db.js";
@@ -41,7 +42,7 @@ export async function registerOrderRoutes(fastify: FastifyInstance): Promise<voi
         return reply.status(400).send({ error: "PRIVATE_KEY required for POST /orders", dataIntegrity: "DERIVED" as const });
       }
       const markets = await activeMarkets(ctx);
-      const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === identifier || m.symbol === identifier);
+      const found = findMarketById(markets, identifier);
       if (!found) {
         await ctx.exchange.close().catch(() => undefined);
         return reply.status(404).send({ error: `market ${identifier} not found among active markets`, dataIntegrity: "LIVE_INDEXER" as const });

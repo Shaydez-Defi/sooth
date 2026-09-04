@@ -132,6 +132,11 @@ export function formatMarket(market: MarketForFormat): {
   };
 }
 
+// URL slugs use ~ in place of / (readable, unambiguous - symbols never contain ~).
+export function marketSlug(symbol: string): string {
+  return symbol.replaceAll("/", "~");
+}
+
 // Convenience for rendering - returns primary and secondary as separate React-friendly strings
 export function getMarketLabel(market: MarketForFormat): { label: string; sublabel: string; title: string } {
   const f = formatMarket(market);

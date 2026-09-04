@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, postAnalyze, getMarkets, type DecisionOutput } from "../lib/api";
-import { formatMarket } from "../lib/formatMarket";
+import { formatMarket, marketSlug } from "../lib/formatMarket";
 import { MarketCard } from "../components/decision";
 import { COLOR, EASE } from "../components/theme";
 
@@ -225,7 +225,7 @@ export default function SoothMarkets() {
               price={m.analysisUnavailable || !Number.isFinite(m.marketProb) ? "-" : pct(m.marketProb)}
               decision={m.decision}
               score={m.score}
-              onOpen={() => navigate(`/markets/${encodeURIComponent(m.id)}`, { state: { label: m.label, sublabel: m.sublabel } })}
+              onOpen={() => navigate(`/markets/${encodeURIComponent(m.rawSymbol !== "" ? marketSlug(m.rawSymbol) : m.id)}`, { state: { label: m.label, sublabel: m.sublabel } })}
             />
           ))}
         </div>

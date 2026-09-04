@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-base-to-string */
 import type { FastifyInstance } from "fastify";
 import { createExchange, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
-import { getActiveMarketsCached, getSharedCtx } from "../registryCache.js";
+import { getActiveMarketsCached, getSharedCtx, findMarketById } from "../registryCache.js";
 import { collectVariables, isStrikePresent } from "../../analysis/variables.js";
 import { computeFairValue } from "../../analysis/contextEngine.js";
 import { checkSettlement } from "../../analysis/settlementGate.js";
@@ -33,7 +33,7 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
         if (!identifier) {
           return reply.status(400).send({ error: "provide marketId or symbol or all:true", dataIntegrity: "DERIVED" as const });
         }
-        const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === identifier || m.symbol === identifier);
+        const found = findMarketById(markets, identifier);
         if (!found) {
           return reply.status(404).send({ error: `market ${identifier} not found`, dataIntegrity: "LIVE_INDEXER" as const });
         }

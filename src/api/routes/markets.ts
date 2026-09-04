@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import type { FastifyInstance } from "fastify";
 import { marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
-import { getActiveMarketsCached, getSharedCtx } from "../registryCache.js";
+import { getActiveMarketsCached, getSharedCtx, findMarketById } from "../registryCache.js";
 import { analyzeMarket } from "../../analysis/engine.js";
 import { collectVariables, isStrikePresent } from "../../analysis/variables.js";
 import { computeFairValue } from "../../analysis/contextEngine.js";
@@ -81,7 +81,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = getSharedCtx();
       const { markets } = await getActiveMarketsCached();
-      const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === id || m.symbol === id);
+      const found = findMarketById(markets, id);
       if (!found) {
         // Also try settled via listBinaryMarkets? For now return 404
         return reply.status(404).send({ error: `market ${id} not found among active markets`, dataIntegrity: "LIVE_INDEXER" as const });
@@ -119,7 +119,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = getSharedCtx();
       const { markets } = await getActiveMarketsCached();
-      const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === id || m.symbol === id);
+      const found = findMarketById(markets, id);
       if (!found) {
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" as const });
       }
@@ -145,7 +145,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = getSharedCtx();
       const { markets } = await getActiveMarketsCached();
-      const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === id || m.symbol === id);
+      const found = findMarketById(markets, id);
       if (!found) {
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" as const });
       }
@@ -270,11 +270,25 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     let db: ReturnType<typeof openSnapshotDb> | null = null;
     try {
       db = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
-      const rows = db
-        .prepare(
+      const queryRows = (mid: string) =>
+        db?.prepare(
           `SELECT capturedAtIso, mid, imbalance, blockNumber, capturedAtUnix FROM snapshots WHERE marketId = ? ORDER BY capturedAtUnix DESC LIMIT ?`,
-        )
-        .all(marketId, limit) as Array<{ capturedAtIso: string; mid: number | null; imbalance: number; blockNumber: number | null; capturedAtUnix: number }>;
+        ).all(mid, limit) as Array<{ capturedAtIso: string; mid: number | null; imbalance: number; blockNumber: number | null; capturedAtUnix: number }>;
+      let rows = queryRows(marketId);
+      let resolvedId = marketId;
+      // URL slugs (symbol with / as ~) never match the DB - resolve to the marketId first.
+      if (rows.length === 0 && marketId.includes("~")) {
+        try {
+          const { markets } = await getActiveMarketsCached();
+          const found = findMarketById(markets, marketId);
+          if (found) {
+            resolvedId = String((found.info as unknown as { marketId: string }).marketId);
+            rows = queryRows(resolvedId);
+          }
+        } catch {
+          // Indexer down - return whatever the direct lookup found (possibly empty).
+        }
+      }
       // Return most recent `limit` ordered chronologically for chart (oldest → newest)
       const ordered = [...rows].reverse();
       const data = ordered.map((r) => ({
@@ -289,7 +303,7 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
         data,
         count: data.length,
         hasHistory,
-        marketId,
+        marketId: resolvedId,
         limit,
         dataIntegrity: "HISTORICAL" as const,
         ...(hasHistory ? {} : { note: "no history yet - logger hasn't captured this market" }),

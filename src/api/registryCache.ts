@@ -41,6 +41,15 @@ let entry: RegistryEntry | null = null;
 let inflight: Promise<UnifiedMarket[]> | null = null;
 let sharedCtx: EcContext | null = null;
 
+/**
+ * Find a market by full id, full symbol, or URL slug (symbol with / as ~).
+ * Shared by every route that resolves a market identifier.
+ */
+export function findMarketById<T extends { symbol: string; info: unknown }>(markets: T[], id: string): T | undefined {
+  const deslug = id.includes("~") ? id.replaceAll("~", "/") : id;
+  return markets.find((m) => String((m.info as { marketId: string }).marketId) === id || m.symbol === id || m.symbol === deslug);
+}
+
 /** The one exchange context all cached reads share - see affinity note above. */
 export function getSharedCtx(): EcContext {
   if (!sharedCtx) {

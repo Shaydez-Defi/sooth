@@ -1,6 +1,7 @@
 import { COLOR } from "./theme";
 import type { DecisionOutput, DecisionSignal } from "../lib/api";
 
+
 export function DecisionBadge({ decision }: { decision: DecisionOutput["decision"] }) {
   const style: React.CSSProperties =
     decision === "TRADE"

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, getBots, getBotEvents, postAnalyze, postBotStart, postBotStop, type DecisionOutput } from "../lib/api";
-import { formatSymbolFallback } from "../lib/formatMarket";
+import { formatSymbolFallback, marketSlug } from "../lib/formatMarket";
 import { summarizeEvent } from "../components/eventSummary";
 import { DecisionBadge, OpportunityScore } from "../components/decision";
 import { COLOR } from "../components/theme";
@@ -150,7 +150,7 @@ export default function Intelligence() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <OpportunityScore score={top.score} />
-                <button className="sooth-focusable" onClick={() => navigate(`/markets/${encodeURIComponent(top.id)}`)} style={{ background: COLOR.accent, color: COLOR.ink, border: "none", borderRadius: 6, padding: "8px 16px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>
+                <button className="sooth-focusable" onClick={() => navigate(`/markets/${encodeURIComponent(marketSlug(top.label))}`)} style={{ background: COLOR.accent, color: COLOR.ink, border: "none", borderRadius: 6, padding: "8px 16px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>
                   Open
                 </button>
               </div>

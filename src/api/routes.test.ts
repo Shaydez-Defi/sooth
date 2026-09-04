@@ -48,8 +48,10 @@ vi.mock("@dreamdex-bot-kit/ec-core", () => {
   };
 });
 
-vi.mock("./registryCache.js", () => {
+vi.mock("./registryCache.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./registryCache.js")>();
   return {
+    ...actual,
     getActiveMarketsCached: vi.fn(async () => ({ markets: shared.markets, cacheAgeSec: 0, stale: false })),
     getSharedCtx: vi.fn(() => ({
       canTrade: true,
@@ -99,6 +101,13 @@ describe("API routes - shape, tags, validation", () => {
     const body = JSON.parse(res.body) as { data: { direction: string }; dataIntegrity: unknown };
     expect(body.data).toHaveProperty("direction");
     expect(body.dataIntegrity).toBeDefined();
+  });
+
+  it("GET /markets/:id/analysis - accepts symbol slug with ~ for /", async () => {
+    const res = await server.inject({ method: "GET", url: "/markets/ETH-TEST~tUSDC/analysis" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { data: { symbol: string } };
+    expect(body.data.symbol).toBe("ETH-TEST/tUSDC");
   });
 
   it("GET /positions - LIVE_ONCHAIN tag", async () => {

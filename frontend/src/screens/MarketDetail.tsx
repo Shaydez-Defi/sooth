@@ -2,12 +2,13 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, CheckCircle2, XCircle } from "lucide-react";
 import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, getMarketById, getMarkets, type MarketAnalysis, type DecisionOutput, type DecisionGateCheck } from "../lib/api";
-import { formatMarket, formatSymbolFallback } from "../lib/formatMarket";
+import { formatMarket, formatSymbolFallback, marketSlug } from "../lib/formatMarket";
 import type { EChartsCoreOption } from "echarts/core";
 import { EChart } from "../components/EChart";
 import { ECHARTS_MONO, AXIS_COMMON, areaGradient, tooltipBox, hexToRgba } from "../components/chartTheme";
 import { EmptyState } from "../components/EmptyState";
 import { DecisionBadge, SignalList, OpportunityScore, FairValueComparison } from "../components/decision";
+import { plainSummary } from "../components/decisionText";
 import { summarizeEvent } from "../components/eventSummary";
 
 // Preserved verbatim from sooth-market-detail-v3.jsx - inline, not unified
@@ -118,7 +119,7 @@ type DetailTab = (typeof DETAIL_TABS)[number];
 
 function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | null; marketId: string; formatted: { label: string; sublabel: string; title: string } | null }) {
   const [open, setOpen] = useState(false);
-  const [options, setOptions] = useState<Array<{ id: string; label: string; sublabel: string }>>([]);
+  const [options, setOptions] = useState<Array<{ id: string; slug: string; label: string; sublabel: string }>>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const navigate = useNavigate();
   const edge = analysis ? analysis.estimatedProbability - analysis.marketProbability : 0;
@@ -135,7 +136,7 @@ function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | 
           setOptions(
             res.data.map((m) => {
               const fmt = formatMarket({ marketId: m.marketId, symbol: m.symbol, asset: m.asset, expiry: m.expiry, intervalSec: m.intervalSec, interval: m.interval, question: m.question, strike: m.strike });
-              return { id: m.marketId, label: fmt.primary, sublabel: fmt.secondary };
+              return { id: m.marketId, slug: marketSlug(m.symbol), label: fmt.primary, sublabel: fmt.secondary };
             }),
           );
         })
@@ -169,11 +170,11 @@ function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | 
                     className="sooth-focusable"
                     onClick={() => {
                       setOpen(false);
-                      navigate(`/markets/${encodeURIComponent(o.id)}`, { state: { label: o.label, sublabel: o.sublabel } });
+                      navigate(`/markets/${encodeURIComponent(o.slug)}`, { state: { label: o.label, sublabel: o.sublabel } });
                     }}
-                    style={{ display: "block", width: "100%", textAlign: "left", background: o.id === marketId ? "rgba(204,136,153,0.08)" : "transparent", border: "none", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontFamily: "monospace" }}
+                    style={{ display: "block", width: "100%", textAlign: "left", background: o.id === marketId || o.slug === marketId ? "rgba(204,136,153,0.08)" : "transparent", border: "none", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontFamily: "monospace" }}
                   >
-                    <span style={{ display: "block", fontSize: 12, color: o.id === marketId ? COLOR.accent : COLOR.text, fontWeight: o.id === marketId ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>
+                    <span style={{ display: "block", fontSize: 12, color: o.id === marketId || o.slug === marketId ? COLOR.accent : COLOR.text, fontWeight: o.id === marketId || o.slug === marketId ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>
                     {o.sublabel && <span style={{ display: "block", fontSize: 10, color: COLOR.faint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.sublabel}</span>}
                   </button>
                 ))
@@ -206,6 +207,7 @@ function TopBar({ analysis, marketId, formatted }: { analysis: MarketAnalysis | 
 }
 
 function ReasoningTrace({ analysis, decision, gateChecks }: { analysis: MarketAnalysis; decision: DecisionOutput | null; gateChecks: DecisionGateCheck[] }) {
+  const [showTech, setShowTech] = useState(false);
   return (
     <div className="sooth-glass-card">
       <PanelHeader
@@ -218,23 +220,40 @@ function ReasoningTrace({ analysis, decision, gateChecks }: { analysis: MarketAn
           ) : undefined
         }
       >
-        Reasoning trace - why {analysis.recommendation}
+        Why {decision ? decision.decision.replace("_", " ").toLowerCase() : analysis.recommendation.toLowerCase()}
       </PanelHeader>
       {decision && (
-        <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}` }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontFamily: "monospace", fontSize: 12 }}>
-            <span style={{ color: COLOR.muted }}>fair <span style={{ color: COLOR.accent }}>{pct(decision.fairValue)}</span></span>
-            <span style={{ color: COLOR.muted }}>raw <span style={{ color: COLOR.text }}>{decision.rawEdge >= 0 ? "+" : ""}{(decision.rawEdge * 100).toFixed(2)}%</span></span>
-            <span style={{ color: COLOR.muted }}>exec <span style={{ color: decision.executableEdge >= 0 ? COLOR.up : COLOR.down }}>{decision.executableEdge >= 0 ? "+" : ""}{(decision.executableEdge * 100).toFixed(2)}%</span></span>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-            {decision.reasons.map((r, i) => (
-              <span key={i} style={{ fontSize: 11.5, color: COLOR.muted, lineHeight: 1.5 }}>{r}</span>
-            ))}
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <SignalList signals={decision.signals} />
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          {plainSummary(decision).map((line) => (
+            <p key={line} style={{ fontSize: 14, color: COLOR.text, margin: 0, lineHeight: 1.55 }}>{line}</p>
+          ))}
+        </div>
+      )}
+      {decision && (
+        <div style={{ marginTop: 12 }}>
+          <SignalList signals={decision.signals} />
+        </div>
+      )}
+      <button className="sooth-focusable" onClick={() => setShowTech((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: 12, color: COLOR.muted, padding: 0, marginTop: 12 }}>
+        <ChevronDown size={14} color={COLOR.faint} style={{ transform: showTech ? "rotate(180deg)" : "none", transition: `transform 150ms ${EASE}`, flexShrink: 0 }} />
+        View technical analysis
+      </button>
+      {showTech && (
+        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 8, background: COLOR.surface2, border: `1px solid ${COLOR.border}` }}>
+          {decision && (
+            <>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontFamily: "monospace", fontSize: 12 }}>
+                <span style={{ color: COLOR.muted }}>fair <span style={{ color: COLOR.accent }}>{pct(decision.fairValue)}</span></span>
+                <span style={{ color: COLOR.muted }}>raw <span style={{ color: COLOR.text }}>{decision.rawEdge >= 0 ? "+" : ""}{(decision.rawEdge * 100).toFixed(2)}%</span></span>
+                <span style={{ color: COLOR.muted }}>exec <span style={{ color: decision.executableEdge >= 0 ? COLOR.up : COLOR.down }}>{decision.executableEdge >= 0 ? "+" : ""}{(decision.executableEdge * 100).toFixed(2)}%</span></span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {decision.reasons.map((r, i) => (
+                  <span key={i} style={{ fontSize: 11.5, color: COLOR.muted, lineHeight: 1.5 }}>{r}</span>
+                ))}
+              </div>
+            </>
+          )}
           {gateChecks.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {gateChecks.map((g) => (
@@ -244,16 +263,16 @@ function ReasoningTrace({ analysis, decision, gateChecks }: { analysis: MarketAn
               ))}
             </div>
           )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "6px 24px", marginTop: 12 }}>
+            {analysis.reasons.map((r, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, fontSize: 13, color: COLOR.muted, lineHeight: 1.5 }}>
+                <span style={{ fontFamily: "monospace", color: COLOR.faint, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+                {r}
+              </div>
+            ))}
+          </div>
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "6px 24px" }}>
-        {analysis.reasons.map((r, i) => (
-          <div key={i} style={{ display: "flex", gap: 8, fontSize: 13, color: COLOR.muted, lineHeight: 1.5 }}>
-            <span style={{ fontFamily: "monospace", color: COLOR.faint, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
-            {r}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

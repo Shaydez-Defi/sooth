@@ -425,6 +425,10 @@ var BIGINT_MARKER = "$bigint";
 var entry = null;
 var inflight = null;
 var sharedCtx = null;
+function findMarketById(markets, id) {
+  const deslug = id.includes("~") ? id.replaceAll("~", "/") : id;
+  return markets.find((m) => String(m.info.marketId) === id || m.symbol === id || m.symbol === deslug);
+}
 function getSharedCtx() {
   if (!sharedCtx) {
     sharedCtx = createExchange({ withSigner: false });
@@ -1690,7 +1694,7 @@ async function registerMarketRoutes(fastify) {
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = getSharedCtx();
       const { markets } = await getActiveMarketsCached();
-      const found = markets.find((m) => String(m.info.marketId) === id || m.symbol === id);
+      const found = findMarketById(markets, id);
       if (!found) {
         return reply.status(404).send({ error: `market ${id} not found among active markets`, dataIntegrity: "LIVE_INDEXER" });
       }
@@ -1725,7 +1729,7 @@ async function registerMarketRoutes(fastify) {
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = getSharedCtx();
       const { markets } = await getActiveMarketsCached();
-      const found = markets.find((m) => String(m.info.marketId) === id || m.symbol === id);
+      const found = findMarketById(markets, id);
       if (!found) {
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" });
       }
@@ -1749,7 +1753,7 @@ async function registerMarketRoutes(fastify) {
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
       const ctx = getSharedCtx();
       const { markets } = await getActiveMarketsCached();
-      const found = markets.find((m) => String(m.info.marketId) === id || m.symbol === id);
+      const found = findMarketById(markets, id);
       if (!found) {
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" });
       }
@@ -1861,9 +1865,22 @@ async function registerMarketRoutes(fastify) {
     let db = null;
     try {
       db = openSnapshotDb(SNAPSHOT_CONFIG.DB_PATH);
-      const rows = db.prepare(
+      const queryRows = (mid) => db?.prepare(
         `SELECT capturedAtIso, mid, imbalance, blockNumber, capturedAtUnix FROM snapshots WHERE marketId = ? ORDER BY capturedAtUnix DESC LIMIT ?`
-      ).all(marketId, limit);
+      ).all(mid, limit);
+      let rows = queryRows(marketId);
+      let resolvedId = marketId;
+      if (rows.length === 0 && marketId.includes("~")) {
+        try {
+          const { markets } = await getActiveMarketsCached();
+          const found = findMarketById(markets, marketId);
+          if (found) {
+            resolvedId = String(found.info.marketId);
+            rows = queryRows(resolvedId);
+          }
+        } catch {
+        }
+      }
       const ordered = [...rows].reverse();
       const data = ordered.map((r) => ({
         capturedAtIso: r.capturedAtIso,
@@ -1877,7 +1894,7 @@ async function registerMarketRoutes(fastify) {
         data,
         count: data.length,
         hasHistory,
-        marketId,
+        marketId: resolvedId,
         limit,
         dataIntegrity: "HISTORICAL",
         ...hasHistory ? {} : { note: "no history yet - logger hasn't captured this market" }
@@ -2247,7 +2264,7 @@ async function registerOrderRoutes(fastify) {
         return reply.status(400).send({ error: "PRIVATE_KEY required for POST /orders", dataIntegrity: "DERIVED" });
       }
       const markets = await activeMarkets(ctx);
-      const found = markets.find((m) => String(m.info.marketId) === identifier || m.symbol === identifier);
+      const found = findMarketById(markets, identifier);
       if (!found) {
         await ctx.exchange.close().catch(() => void 0);
         return reply.status(404).send({ error: `market ${identifier} not found among active markets`, dataIntegrity: "LIVE_INDEXER" });
@@ -2835,7 +2852,7 @@ async function registerStrategyRoutes(fastify) {
         if (!identifier) {
           return reply.status(400).send({ error: "provide marketId or symbol or all:true", dataIntegrity: "DERIVED" });
         }
-        const found = markets.find((m) => String(m.info.marketId) === identifier || m.symbol === identifier);
+        const found = findMarketById(markets, identifier);
         if (!found) {
           return reply.status(404).send({ error: `market ${identifier} not found`, dataIntegrity: "LIVE_INDEXER" });
         }

@@ -3,6 +3,7 @@ import type { UnifiedMarket } from "@somnia-chain/markets-sdk";
 const state = vi.hoisted(() => ({ impl: vi.fn<(...args: unknown[]) => Promise<unknown>>() }));
 
 vi.mock("@dreamdex-bot-kit/ec-core", () => ({
+  createExchange: () => ({ mocked: true }),
   activeMarkets: (...args: unknown[]): Promise<unknown> => state.impl(...args),
 }));
 
@@ -24,21 +25,21 @@ describe("registryCache - single-flight TTL with honest stale fallback", () => {
   });
 
   it("primes once and serves fresh within TTL without refetching", async () => {
-    const first = await getActiveMarketsCached({} as never);
+    const first = await getActiveMarketsCached();
     expect(first.stale).toBe(false);
     expect(first.cacheAgeSec).toBe(0);
     expect(first.markets).toHaveLength(1);
-    const second = await getActiveMarketsCached({} as never);
+    const second = await getActiveMarketsCached();
     expect(second.stale).toBe(false);
     expect(state.impl).toHaveBeenCalledTimes(1);
   });
 
   it("serves stale labeled rows when refresh fails after TTL expiry", async () => {
     vi.useFakeTimers();
-    await getActiveMarketsCached({} as never);
+    await getActiveMarketsCached();
     vi.setSystemTime(Date.now() + REGISTRY_CACHE_TTL_MS + 1);
     state.impl.mockRejectedValueOnce(new Error("indexer down"));
-    const res = await getActiveMarketsCached({} as never);
+    const res = await getActiveMarketsCached();
     expect(res.stale).toBe(true);
     expect(res.markets).toHaveLength(1);
     expect(res.cacheAgeSec).toBeGreaterThan(0);
@@ -46,7 +47,7 @@ describe("registryCache - single-flight TTL with honest stale fallback", () => {
 
   it("throws when the indexer fails with an empty cache", async () => {
     state.impl.mockRejectedValueOnce(new Error("indexer down"));
-    await expect(getActiveMarketsCached({} as never)).rejects.toThrow("indexer down");
+    await expect(getActiveMarketsCached()).rejects.toThrow("indexer down");
   });
 });
 
@@ -88,7 +89,7 @@ describe("registryCache KV tier - shared across instances", () => {
 
   it("serves a fresh KV hit without touching origin", async () => {
     fetchMock.mockResolvedValue(kvResult(kvEnvelope(Date.now())));
-    const res = await getActiveMarketsCached({} as never);
+    const res = await getActiveMarketsCached();
     expect(state.impl).not.toHaveBeenCalled();
     expect(res.stale).toBe(false);
     expect(res.markets).toHaveLength(1);
@@ -96,7 +97,7 @@ describe("registryCache KV tier - shared across instances", () => {
 
   it("flags a KV hit past the freshness window as stale", async () => {
     fetchMock.mockResolvedValue(kvResult(kvEnvelope(Date.now() - REGISTRY_CACHE_TTL_MS - 5_000)));
-    const res = await getActiveMarketsCached({} as never);
+    const res = await getActiveMarketsCached();
     expect(state.impl).not.toHaveBeenCalled();
     expect(res.stale).toBe(true);
     expect(res.cacheAgeSec).toBeGreaterThan(0);
@@ -104,7 +105,7 @@ describe("registryCache KV tier - shared across instances", () => {
 
   it("falls back to origin when KV fails", async () => {
     fetchMock.mockRejectedValue(new Error("KV down"));
-    const res = await getActiveMarketsCached({} as never);
+    const res = await getActiveMarketsCached();
     expect(state.impl).toHaveBeenCalledTimes(1);
     expect(res.stale).toBe(false);
     expect(res.markets).toHaveLength(1);

@@ -4,8 +4,17 @@
  *
  * The public indexer 504s under load; without this, every UI read fails together.
  * Cached reads are labeled with age/staleness - never presented as fresh.
+ *
+ * Registry affinity: the SDK resolves symbols against the registry loaded into a
+ * specific exchange context. Cached rows MUST be used with the same context that
+ * swept them, so all cached reads share one long-lived context (same pattern the
+ * bot runner uses across ticks). Never close it; never mix cached rows into a
+ * fresh per-request context ("unknown symbol - call loadMarkets() first").
+ * Caveat: KV-restored rows come from another instance's sweep. That path is only
+ * live when KV env is configured (it isn't anywhere yet); if it ever serves rows
+ * newer than the local registry, book reads for those rows 500 until refresh.
  */
-import { activeMarkets, type EcContext } from "@dreamdex-bot-kit/ec-core";
+import { activeMarkets, createExchange, type EcContext } from "@dreamdex-bot-kit/ec-core";
 import type { UnifiedMarket } from "@somnia-chain/markets-sdk";
 import { kvConfigured, kvGet, kvSet } from "./kvStore.js";
 
@@ -30,6 +39,15 @@ export interface CachedRegistry {
 
 let entry: RegistryEntry | null = null;
 let inflight: Promise<UnifiedMarket[]> | null = null;
+let sharedCtx: EcContext | null = null;
+
+/** The one exchange context all cached reads share - see affinity note above. */
+export function getSharedCtx(): EcContext {
+  if (!sharedCtx) {
+    sharedCtx = createExchange({ withSigner: false });
+  }
+  return sharedCtx;
+}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -111,7 +129,7 @@ async function writeKvTier(markets: UnifiedMarket[]): Promise<void> {
   }
 }
 
-export async function getActiveMarketsCached(ctx: EcContext): Promise<CachedRegistry> {
+export async function getActiveMarketsCached(): Promise<CachedRegistry> {
   const now = Date.now();
   const hit = fresh(now);
   if (hit) return hit;
@@ -120,7 +138,7 @@ export async function getActiveMarketsCached(ctx: EcContext): Promise<CachedRegi
   if (shared) return shared;
 
   if (!inflight) {
-    const started = activeMarkets(ctx);
+    const started = activeMarkets(getSharedCtx());
     inflight = started.then(
       (markets) => {
         entry = { markets, fetchedAt: Date.now() };

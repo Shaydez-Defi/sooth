@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-base-to-string */
 import type { FastifyInstance } from "fastify";
 import { createExchange, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
-import { getActiveMarketsCached } from "../registryCache.js";
+import { getActiveMarketsCached, getSharedCtx } from "../registryCache.js";
 import { analyzeMarket } from "../../analysis/engine.js";
 import { runBacktest, type SettledMarket } from "../../backtest/engine.js";
 import { ANALYSIS_CONFIG } from "../../config.js";
@@ -15,18 +15,16 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached();
       let targets = markets;
       if (!wantAll) {
         const identifier = typeof marketId === "string" && String(marketId).trim() !== "" ? String(marketId).trim() : String(symbol ?? "").trim();
         if (!identifier) {
-          await ctx.exchange.close().catch(() => undefined);
           return reply.status(400).send({ error: "provide marketId or symbol or all:true", dataIntegrity: "DERIVED" as const });
         }
         const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === identifier || m.symbol === identifier);
         if (!found) {
-          await ctx.exchange.close().catch(() => undefined);
           return reply.status(404).send({ error: `market ${identifier} not found`, dataIntegrity: "LIVE_INDEXER" as const });
         }
         targets = [found];
@@ -57,7 +55,6 @@ export async function registerStrategyRoutes(fastify: FastifyInstance): Promise<
         });
         results.push({ marketId: String(info.marketId), symbol: m.symbol, analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } as const });
       }
-      await ctx.exchange.close().catch(() => undefined);
       return reply.send({ data: results, dataIntegrity: "DERIVED on LIVE_INDEXER/LIVE_ONCHAIN" as const, count: results.length, cacheAgeSec, stale });
     } catch (err) {
       return reply.status(500).send({ error: `POST /strategies/analyze failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });

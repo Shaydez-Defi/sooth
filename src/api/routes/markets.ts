@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import type { FastifyInstance } from "fastify";
-import { createExchange, marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
-import { getActiveMarketsCached } from "../registryCache.js";
+import { marketOnchain, outcomeSymbols } from "@dreamdex-bot-kit/ec-core";
+import { getActiveMarketsCached, getSharedCtx } from "../registryCache.js";
 import { analyzeMarket } from "../../analysis/engine.js";
 import { ANALYSIS_CONFIG, SNAPSHOT_CONFIG } from "../../config.js";
 import { openSnapshotDb } from "../../snapshots/db.js";
@@ -26,8 +26,8 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached();
       const tagged = markets.map((m) => {
         const info = m.info as unknown as {
           marketId: string;
@@ -59,7 +59,6 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
           } as const,
         };
       });
-      await ctx.exchange.close().catch(() => undefined);
       return reply.send({ data: tagged, dataIntegrity: "LIVE_INDEXER" as const, count: tagged.length, cacheAgeSec, stale });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });
@@ -75,16 +74,14 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets } = await getActiveMarketsCached();
       const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === id || m.symbol === id);
       if (!found) {
-        await ctx.exchange.close().catch(() => undefined);
         // Also try settled via listBinaryMarkets? For now return 404
         return reply.status(404).send({ error: `market ${id} not found among active markets`, dataIntegrity: "LIVE_INDEXER" as const });
       }
       const onchain = await marketOnchain(ctx, found);
-      await ctx.exchange.close().catch(() => undefined);
       if (!onchain) {
         return reply.status(404).send({ error: `market ${id} onchain not found`, dataIntegrity: "LIVE_ONCHAIN" as const });
       }
@@ -115,16 +112,14 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets } = await getActiveMarketsCached();
       const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === id || m.symbol === id);
       if (!found) {
-        await ctx.exchange.close().catch(() => undefined);
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" as const });
       }
       const { yes } = outcomeSymbols(found);
       const book = await ctx.exchange.fetchOrderBook(yes, depth);
-      await ctx.exchange.close().catch(() => undefined);
       return reply.send({
         data: { marketId: String((found.info as unknown as { marketId: string }).marketId), symbol: found.symbol, yesSymbol: yes, bids: book.bids, asks: book.asks },
         dataIntegrity: { marketId: "LIVE_ONCHAIN", symbol: "LIVE_INDEXER", bids: "LIVE_INDEXER", asks: "LIVE_INDEXER" } as const,
@@ -143,16 +138,14 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets } = await getActiveMarketsCached();
       const found = markets.find((m) => String((m.info as unknown as { marketId: string }).marketId) === id || m.symbol === id);
       if (!found) {
-        await ctx.exchange.close().catch(() => undefined);
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" as const });
       }
       const onchain = await marketOnchain(ctx, found);
       if (!onchain) {
-        await ctx.exchange.close().catch(() => undefined);
         return reply.status(404).send({ error: `market ${id} onchain not found`, dataIntegrity: "LIVE_ONCHAIN" as const });
       }
       const { yes } = outcomeSymbols(found);
@@ -174,7 +167,6 @@ export async function registerMarketRoutes(fastify: FastifyInstance): Promise<vo
         marketProbability: mid ?? undefined,
         timeRemaining,
       });
-      await ctx.exchange.close().catch(() => undefined);
       return reply.send({ data: analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } as const });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets/:id/analysis failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });

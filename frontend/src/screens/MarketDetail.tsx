@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { ChevronDown, CheckCircle2, XCircle } from "lucide-react";
 import { ApiError, getOrderbook, getAnalysis, getPositions, getPortfolio, getBotEvents, postOrder, getMarketHistory, getMarketById, type MarketAnalysis } from "../lib/api";
 import { formatMarket, formatSymbolFallback } from "../lib/formatMarket";
@@ -707,6 +707,11 @@ function EventLog({ marketId }: { marketId: string }) {
 export default function MarketDetail() {
   const { id } = useParams<{ id: string }>();
   const marketId = id ?? "";
+  // Human label passed from the markets table - shown while loading so the
+  // raw URL id never flashes. Direct visits fall back to generic copy.
+  const location = useLocation();
+  const navState = location.state as { label?: unknown; sublabel?: unknown } | null;
+  const navLabel = navState && typeof navState.label === "string" && navState.label !== "" ? navState.label : null;
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
   const [bids, setBids] = useState<[number, number][]>([]);
   const [asks, setAsks] = useState<[number, number][]>([]);
@@ -793,10 +798,10 @@ export default function MarketDetail() {
         <div style={{ padding: "10px 20px" }}>
           <Link to="/markets" style={{ color: COLOR.muted, fontSize: 13, textDecoration: "none" }}>← Back to markets</Link>
         </div>
-        {loading && <div style={{ padding: "40px 20px", color: COLOR.faint, fontFamily: "monospace" }}>Loading live analysis for {marketId}…</div>}
+        {loading && <div style={{ padding: "40px 20px", color: COLOR.faint, fontFamily: "monospace" }}>Loading {navLabel ?? "market data"}…</div>}
         {error && (
           <div style={{ margin: "16px 20px", border: `1px solid ${COLOR.down}`, borderRadius: 8, padding: 12, background: "rgba(202,117,96,0.08)" }}>
-            <div style={{ fontSize: 13, color: COLOR.down, fontWeight: 600 }}>Failed to load market {marketId}</div>
+            <div style={{ fontSize: 13, color: COLOR.down, fontWeight: 600 }}>Failed to load {navLabel ?? "market"}</div>
             <div style={{ fontSize: 12, color: COLOR.muted, marginTop: 4, fontFamily: "monospace", lineHeight: 1.5 }}>{error}</div>
             {error.includes("API not reachable") && (
               <div style={{ fontSize: 11, color: COLOR.muted, marginTop: 6 }}>

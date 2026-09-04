@@ -565,7 +565,7 @@ export default function SoothMarkets() {
                     onMouseLeave={() => setHoveredRow(null)}
                     onClick={() => {
                       setSelectedRow(m.id);
-                      navigate(`/markets/${encodeURIComponent(m.id)}`);
+                      navigate(`/markets/${encodeURIComponent(m.id)}`, { state: { label: m.label, sublabel: m.sublabel } });
                     }}
                     style={{
                       display: "grid",

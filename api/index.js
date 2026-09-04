@@ -424,6 +424,13 @@ var MS_PER_SEC = 1e3;
 var BIGINT_MARKER = "$bigint";
 var entry = null;
 var inflight = null;
+var sharedCtx = null;
+function getSharedCtx() {
+  if (!sharedCtx) {
+    sharedCtx = createExchange({ withSigner: false });
+  }
+  return sharedCtx;
+}
 function errorMessage2(err) {
   return err instanceof Error ? err.message : String(err);
 }
@@ -493,14 +500,14 @@ async function writeKvTier(markets) {
     console.warn(`[registryCache] KV write failed, memory cache only: ${errorMessage2(err)}`);
   }
 }
-async function getActiveMarketsCached(ctx) {
+async function getActiveMarketsCached() {
   const now = Date.now();
   const hit = fresh(now);
   if (hit) return hit;
   const shared = await readKvTier();
   if (shared) return shared;
   if (!inflight) {
-    const started = activeMarkets(ctx);
+    const started = activeMarkets(getSharedCtx());
     inflight = started.then(
       (markets) => {
         entry = { markets, fetchedAt: Date.now() };
@@ -839,6 +846,7 @@ function openSnapshotDb(dbPath = SNAPSHOT_CONFIG.DB_PATH) {
 }
 var SEED_DB_PATH = "data/seed-snapshots.db";
 function seedDbIfMissing(dbPath) {
+  if (dbPath === ":memory:" || dbPath === "") return;
   if (fs.existsSync(dbPath)) return;
   const seed = path.resolve(SEED_DB_PATH);
   if (path.resolve(dbPath) === seed) return;
@@ -1078,8 +1086,8 @@ async function registerMarketRoutes(fastify) {
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached();
       const tagged = markets.map((m) => {
         const info = m.info;
         return {
@@ -1111,7 +1119,6 @@ async function registerMarketRoutes(fastify) {
           }
         };
       });
-      await ctx.exchange.close().catch(() => void 0);
       return reply.send({ data: tagged, dataIntegrity: "LIVE_INDEXER", count: tagged.length, cacheAgeSec, stale });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets failed: ${err.message}`, dataIntegrity: "DERIVED" });
@@ -1125,15 +1132,13 @@ async function registerMarketRoutes(fastify) {
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets } = await getActiveMarketsCached();
       const found = markets.find((m) => String(m.info.marketId) === id || m.symbol === id);
       if (!found) {
-        await ctx.exchange.close().catch(() => void 0);
         return reply.status(404).send({ error: `market ${id} not found among active markets`, dataIntegrity: "LIVE_INDEXER" });
       }
       const onchain = await marketOnchain(ctx, found);
-      await ctx.exchange.close().catch(() => void 0);
       if (!onchain) {
         return reply.status(404).send({ error: `market ${id} onchain not found`, dataIntegrity: "LIVE_ONCHAIN" });
       }
@@ -1162,16 +1167,14 @@ async function registerMarketRoutes(fastify) {
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets } = await getActiveMarketsCached();
       const found = markets.find((m) => String(m.info.marketId) === id || m.symbol === id);
       if (!found) {
-        await ctx.exchange.close().catch(() => void 0);
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" });
       }
       const { yes } = outcomeSymbols(found);
       const book = await ctx.exchange.fetchOrderBook(yes, depth);
-      await ctx.exchange.close().catch(() => void 0);
       return reply.send({
         data: { marketId: String(found.info.marketId), symbol: found.symbol, yesSymbol: yes, bids: book.bids, asks: book.asks },
         dataIntegrity: { marketId: "LIVE_ONCHAIN", symbol: "LIVE_INDEXER", bids: "LIVE_INDEXER", asks: "LIVE_INDEXER" }
@@ -1188,16 +1191,14 @@ async function registerMarketRoutes(fastify) {
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets } = await getActiveMarketsCached();
       const found = markets.find((m) => String(m.info.marketId) === id || m.symbol === id);
       if (!found) {
-        await ctx.exchange.close().catch(() => void 0);
         return reply.status(404).send({ error: `market ${id} not found`, dataIntegrity: "LIVE_INDEXER" });
       }
       const onchain = await marketOnchain(ctx, found);
       if (!onchain) {
-        await ctx.exchange.close().catch(() => void 0);
         return reply.status(404).send({ error: `market ${id} onchain not found`, dataIntegrity: "LIVE_ONCHAIN" });
       }
       const { yes } = outcomeSymbols(found);
@@ -1219,7 +1220,6 @@ async function registerMarketRoutes(fastify) {
         marketProbability: mid ?? void 0,
         timeRemaining
       });
-      await ctx.exchange.close().catch(() => void 0);
       return reply.send({ data: analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } });
     } catch (err) {
       return reply.status(500).send({ error: `GET /markets/:id/analysis failed: ${err.message}`, dataIntegrity: "DERIVED" });
@@ -1906,18 +1906,16 @@ async function registerStrategyRoutes(fastify) {
     try {
       if (!process.env.NETWORK) process.env.NETWORK = "testnet";
       if (!process.env.VENUE_ID && !process.env.OPERATOR_ID) process.env.VENUE_ID = "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c";
-      const ctx = createExchange({ withSigner: false });
-      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached(ctx);
+      const ctx = getSharedCtx();
+      const { markets, cacheAgeSec, stale } = await getActiveMarketsCached();
       let targets = markets;
       if (!wantAll) {
         const identifier = typeof marketId === "string" && String(marketId).trim() !== "" ? String(marketId).trim() : String(symbol ?? "").trim();
         if (!identifier) {
-          await ctx.exchange.close().catch(() => void 0);
           return reply.status(400).send({ error: "provide marketId or symbol or all:true", dataIntegrity: "DERIVED" });
         }
         const found = markets.find((m) => String(m.info.marketId) === identifier || m.symbol === identifier);
         if (!found) {
-          await ctx.exchange.close().catch(() => void 0);
           return reply.status(404).send({ error: `market ${identifier} not found`, dataIntegrity: "LIVE_INDEXER" });
         }
         targets = [found];
@@ -1947,7 +1945,6 @@ async function registerStrategyRoutes(fastify) {
         });
         results.push({ marketId: String(info.marketId), symbol: m.symbol, analysis, dataIntegrity: { analysis: "DERIVED", marketProbability: "LIVE_INDEXER", timeRemaining: "LIVE_ONCHAIN" } });
       }
-      await ctx.exchange.close().catch(() => void 0);
       return reply.send({ data: results, dataIntegrity: "DERIVED on LIVE_INDEXER/LIVE_ONCHAIN", count: results.length, cacheAgeSec, stale });
     } catch (err) {
       return reply.status(500).send({ error: `POST /strategies/analyze failed: ${err.message}`, dataIntegrity: "DERIVED" });

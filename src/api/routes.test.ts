@@ -1,37 +1,43 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import { describe, it, expect, vi, beforeAll } from "vitest";
 
+const shared = vi.hoisted(() => {
+  const exchange = {
+    client: {
+      getViemClient: () => ({
+        getBlockNumber: async () => 123n,
+        getLogs: async () => [],
+        getBalance: async () => 1000000000000000000n,
+        getTransactionReceipt: async () => ({ status: "success", blockNumber: 123n, gasUsed: 100000n }),
+      }),
+      getErc20Balance: async () => 10000000n,
+      listBinaryMarkets: async () => [],
+    },
+    fetchOrderBook: async () => ({ bids: [[0.5, 100] as const, [0.49, 100] as const, [0.48, 100] as const], asks: [[0.52, 100] as const, [0.53, 100] as const, [0.54, 100] as const] }),
+    fetchOpenOrders: async () => [],
+    close: async () => undefined,
+  };
+  const markets = [
+    {
+      symbol: "ETH-TEST/tUSDC",
+      info: { marketId: "0xabc", asset: "ETH", intervalSec: 900, expiry: String(Math.floor(Date.now() / 1000) + 3600), venueId: "0xmock" },
+    },
+    {
+      symbol: "BTC-TEST/tUSDC",
+      info: { marketId: "0xdef", asset: "BTC", intervalSec: 900, expiry: String(Math.floor(Date.now() / 1000) + 3600), venueId: "0xmock" },
+    },
+  ];
+  return { exchange, markets };
+});
+
 vi.mock("@dreamdex-bot-kit/ec-core", () => {
   return {
     createExchange: vi.fn(() => ({
       canTrade: true,
       config: { venueId: "0xmock", network: "testnet", indexerUrl: "https://dev.smk.somnia.host/v1/graphql" },
-      exchange: {
-        client: {
-          getViemClient: () => ({
-            getBlockNumber: async () => 123n,
-            getLogs: async () => [],
-            getBalance: async () => 1000000000000000000n,
-            getTransactionReceipt: async () => ({ status: "success", blockNumber: 123n, gasUsed: 100000n }),
-          }),
-          getErc20Balance: async () => 10000000n,
-          listBinaryMarkets: async () => [],
-        },
-        fetchOrderBook: async () => ({ bids: [[0.5, 100] as const, [0.49, 100] as const, [0.48, 100] as const], asks: [[0.52, 100] as const, [0.53, 100] as const, [0.54, 100] as const] }),
-        fetchOpenOrders: async () => [],
-        close: async () => undefined,
-      },
+      exchange: shared.exchange,
     })),
-    activeMarkets: vi.fn(async () => [
-      {
-        symbol: "ETH-TEST/tUSDC",
-        info: { marketId: "0xabc", asset: "ETH", intervalSec: 900, expiry: String(Math.floor(Date.now() / 1000) + 3600), venueId: "0xmock" },
-      },
-      {
-        symbol: "BTC-TEST/tUSDC",
-        info: { marketId: "0xdef", asset: "BTC", intervalSec: 900, expiry: String(Math.floor(Date.now() / 1000) + 3600), venueId: "0xmock" },
-      },
-    ]),
+    activeMarkets: vi.fn(async () => shared.markets),
     marketOnchain: vi.fn(async (_ctx: unknown, m: { info: unknown }) => ({
       pool: "0x0000000000000000000000000000000000000000",
       expiry: BigInt(Math.floor(Date.now() / 1000) + 3600),
@@ -39,6 +45,17 @@ vi.mock("@dreamdex-bot-kit/ec-core", () => {
       marketId: (m.info as { marketId: string }).marketId,
     })),
     outcomeSymbols: vi.fn((m: { symbol: string }) => ({ yes: `${m.symbol}#YES`, no: `${m.symbol}#NO` })),
+  };
+});
+
+vi.mock("./registryCache.js", () => {
+  return {
+    getActiveMarketsCached: vi.fn(async () => ({ markets: shared.markets, cacheAgeSec: 0, stale: false })),
+    getSharedCtx: vi.fn(() => ({
+      canTrade: true,
+      config: { venueId: "0xmock", network: "testnet", indexerUrl: "https://dev.smk.somnia.host/v1/graphql" },
+      exchange: shared.exchange,
+    })),
   };
 });
 

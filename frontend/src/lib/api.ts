@@ -382,7 +382,7 @@ export interface BotsResponse {
 export function getBots(): Promise<BotsResponse> {
   return apiFetch<BotsResponse>("/bots");
 }
-export function postBotStart(id = "default"): Promise<{ data: { id: string; status: string; tickCount: number }; dataIntegrity: DataIntegrityTag }> {
+export function postBotStart(id = "default"): Promise<{ data: { id: string; status: string; tickCount: number; mode?: "trade" | "watch" }; note?: string; dataIntegrity: DataIntegrityTag }> {
   return apiFetch(`/bots/${encodeURIComponent(id)}/start`, { method: "POST" });
 }
 export function postBotStop(id = "default"): Promise<{ data: { id: string; status: string; tickCount: number }; dataIntegrity: DataIntegrityTag }> {

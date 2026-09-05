@@ -3264,6 +3264,16 @@ function validateBotId(id, reply) {
   });
   return false;
 }
+async function startBotWithFallback(runner) {
+  try {
+    await runner.start({ withSigner: true });
+    return "trade";
+  } catch (err) {
+    if (!(err instanceof Error) || !err.message.includes("PRIVATE_KEY")) throw err;
+    await runner.start({ withSigner: false });
+    return "watch";
+  }
+}
 async function registerBotRoutes(fastify) {
   fastify.get("/bots", async (_request, reply) => {
     try {
@@ -3353,8 +3363,12 @@ async function registerBotRoutes(fastify) {
       if (runner.status() === "running") {
         return reply.send({ data: { id: SINGLE_BOT_ID, status: "running", tickCount: runner.getTickCount() }, dataIntegrity: "DERIVED", note: "already running" });
       }
-      await runner.start({ withSigner: true });
-      return reply.send({ data: { id: SINGLE_BOT_ID, status: runner.status(), tickCount: runner.getTickCount() }, dataIntegrity: "DERIVED" });
+      const mode = await startBotWithFallback(runner);
+      const base = { id: SINGLE_BOT_ID, status: runner.status(), tickCount: runner.getTickCount(), mode };
+      if (mode === "watch") {
+        return reply.send({ data: base, dataIntegrity: "DERIVED", note: "watch-only - no signing key configured, execution disabled" });
+      }
+      return reply.send({ data: base, dataIntegrity: "DERIVED" });
     } catch (err) {
       return reply.status(500).send({ error: `POST /bots/:id/start failed: ${err.message}`, dataIntegrity: "DERIVED" });
     }

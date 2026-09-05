@@ -30,6 +30,7 @@ interface TopPick {
 export default function Intelligence() {
   const [status, setStatus] = useState("unknown");
   const [tickCount, setTickCount] = useState(0);
+  const [modeNote, setModeNote] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [monitored, setMonitored] = useState(0);
   const [opportunities, setOpportunities] = useState(0);
@@ -87,12 +88,19 @@ export default function Intelligence() {
 
   const toggleBot = async () => {
     setActing(true);
+    setError(null);
     try {
-      if (status === "running") await postBotStop("default");
-      else await postBotStart("default");
+      if (status === "running") {
+        await postBotStop("default");
+        setModeNote(null);
+      } else {
+        const res = await postBotStart("default");
+        setModeNote(res.data.mode === "watch" ? "watch-only - execution disabled, no signing key" : null);
+      }
       await load();
-    } catch {
-      setError("Bot control failed - retry.");
+    } catch (err) {
+      const msg = err instanceof ApiError ? `${err.message} (${err.status})` : (err as Error).message;
+      setError(`Bot control failed: ${msg}`);
     } finally {
       setActing(false);
     }
@@ -128,6 +136,7 @@ export default function Intelligence() {
                 SOOTH {isRunning ? "ACTIVE" : "IDLE"}
               </span>
               <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>tick {tickCount}</span>
+              {modeNote && <span style={{ fontFamily: "monospace", fontSize: 11, color: COLOR.faint }}>{modeNote}</span>}
             </div>
             <button className="sooth-focusable" onClick={() => void toggleBot()} disabled={acting} style={{ background: isRunning ? "transparent" : COLOR.accent, color: isRunning ? COLOR.down : COLOR.ink, border: isRunning ? `1px solid ${COLOR.down}` : "none", borderRadius: 6, padding: "8px 16px", fontWeight: 600, cursor: acting ? "wait" : "pointer", fontFamily: "inherit", fontSize: 13 }}>
               {acting ? "Working…" : isRunning ? "Stop" : "Start watching"}

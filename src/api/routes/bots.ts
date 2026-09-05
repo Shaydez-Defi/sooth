@@ -35,6 +35,25 @@ function validateBotId(id: string, reply: import("fastify").FastifyReply): boole
   return false;
 }
 
+export type BotStarter = {
+  start: (opts: { withSigner: boolean }) => Promise<void>;
+};
+
+/**
+ * Start with a signer when a key exists, else watch-only. Missing-key failure
+ * is the only error that falls back - anything else rethrows. Exported for tests.
+ */
+export async function startBotWithFallback(runner: BotStarter): Promise<"trade" | "watch"> {
+  try {
+    await runner.start({ withSigner: true });
+    return "trade";
+  } catch (err) {
+    if (!(err instanceof Error) || !err.message.includes("PRIVATE_KEY")) throw err;
+    await runner.start({ withSigner: false });
+    return "watch";
+  }
+}
+
 export async function registerBotRoutes(fastify: FastifyInstance): Promise<void> {
   // GET /bots - list persisted bot configs/status (single)
   fastify.get("/bots", async (_request, reply) => {
@@ -125,17 +144,22 @@ export async function registerBotRoutes(fastify: FastifyInstance): Promise<void>
     }
   });
 
-  // POST /bots/:id/start - BotRunner.start()
-  fastify.post("/bots/:id/start", async (request, reply) => {
-    const { id } = request.params as { id: string };
+  // POST /bots/:id/start - BotRunner.start(). With a signing key this arms
+  // live trading; without one it starts watch-only monitoring (ticks evaluate,
+  // execution stays gated off). The mode is reported, never implied.
+  fastify.post("/bots/:id/start", async (request, reply) => {    const { id } = request.params as { id: string };
     if (!validateBotId(id, reply)) return;
     try {
       const runner = getRunner();
       if (runner.status() === "running") {
         return reply.send({ data: { id: SINGLE_BOT_ID, status: "running", tickCount: runner.getTickCount() }, dataIntegrity: "DERIVED" as const, note: "already running" });
       }
-      await runner.start({ withSigner: true });
-      return reply.send({ data: { id: SINGLE_BOT_ID, status: runner.status(), tickCount: runner.getTickCount() }, dataIntegrity: "DERIVED" as const });
+      const mode = await startBotWithFallback(runner);
+      const base = { id: SINGLE_BOT_ID, status: runner.status(), tickCount: runner.getTickCount(), mode };
+      if (mode === "watch") {
+        return reply.send({ data: base, dataIntegrity: "DERIVED" as const, note: "watch-only - no signing key configured, execution disabled" });
+      }
+      return reply.send({ data: base, dataIntegrity: "DERIVED" as const });
     } catch (err) {
       return reply.status(500).send({ error: `POST /bots/:id/start failed: ${(err as Error).message}`, dataIntegrity: "DERIVED" as const });
     }

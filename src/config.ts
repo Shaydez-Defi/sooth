@@ -9,6 +9,13 @@ import { CHAIN_IDS, NETWORK_DEFAULTS } from "./constants.js";
 
 dotenvConfig();
 
+// Bridge: our WALLET_PRIVATE_KEY naming → the bot-kit's PRIVATE_KEY expectation
+// (createExchange reads PRIVATE_KEY/TAKER_PRIVATE_KEY only). Runs at import so it
+// applies process-wide before any exchange is built, locally and serverless.
+if (!process.env.PRIVATE_KEY && process.env.WALLET_PRIVATE_KEY) {
+  process.env.PRIVATE_KEY = process.env.WALLET_PRIVATE_KEY;
+}
+
 export interface AppConfig {
   // LIVE_ONCHAIN
   readonly chainId: number;

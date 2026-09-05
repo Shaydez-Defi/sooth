@@ -567,6 +567,9 @@ var NETWORK_DEFAULTS = {
 
 // src/config.ts
 dotenvConfig();
+if (!process.env.PRIVATE_KEY && process.env.WALLET_PRIVATE_KEY) {
+  process.env.PRIVATE_KEY = process.env.WALLET_PRIVATE_KEY;
+}
 var SNAPSHOT_CONFIG = {
   /** Poller interval in ms - env POLL_INTERVAL_MS overrides, must be >= 5_000. */
   POLL_INTERVAL_MS: (() => {
@@ -4337,15 +4340,19 @@ async function buildServer() {
   await fastify.register(cors, { origin: true });
   fastify.get("/health", async () => ({ status: "ok", dataIntegrity: "DERIVED", timestamp: (/* @__PURE__ */ new Date()).toISOString() }));
   fastify.get("/debug/wallet", async () => {
-    const raw = process.env.WALLET_PRIVATE_KEY;
-    const present = typeof raw === "string" && raw.trim() !== "";
-    const trimmed = present ? raw.trim() : "";
-    const validShape = /^0x[0-9a-fA-F]{64}$/.test(trimmed) && !/^0x0{64}$/.test(trimmed);
+    const shapeOf = (raw) => {
+      const present = typeof raw === "string" && raw.trim() !== "";
+      const trimmed = present ? raw.trim() : "";
+      return {
+        present,
+        length: present ? trimmed.length : null,
+        has0xPrefix: present ? trimmed.startsWith("0x") : null,
+        validShape: /^0x[0-9a-fA-F]{64}$/.test(trimmed) && !/^0x0{64}$/.test(trimmed)
+      };
+    };
     return {
-      present,
-      length: present ? trimmed.length : null,
-      has0xPrefix: present ? trimmed.startsWith("0x") : null,
-      validShape,
+      walletPrivateKey: shapeOf(process.env.WALLET_PRIVATE_KEY),
+      privateKey: shapeOf(process.env.PRIVATE_KEY),
       dataIntegrity: "DERIVED"
     };
   });

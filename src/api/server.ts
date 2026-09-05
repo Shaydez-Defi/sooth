@@ -33,17 +33,21 @@ export async function buildServer(): Promise<ReturnType<typeof Fastify>> {
   fastify.get("/health", async () => ({ status: "ok", dataIntegrity: "DERIVED" as const, timestamp: new Date().toISOString() }));
 
   // Debug: wallet-key presence/shape only - NEVER returns key material.
-  // Settles "is the env var actually visible" without exposing anything.
+  // Checks both our WALLET_PRIVATE_KEY and the bot-kit's PRIVATE_KEY.
   fastify.get("/debug/wallet", async () => {
-    const raw = process.env.WALLET_PRIVATE_KEY;
-    const present = typeof raw === "string" && raw.trim() !== "";
-    const trimmed = present ? (raw as string).trim() : "";
-    const validShape = /^0x[0-9a-fA-F]{64}$/.test(trimmed) && !/^0x0{64}$/.test(trimmed);
+    const shapeOf = (raw: string | undefined) => {
+      const present = typeof raw === "string" && raw.trim() !== "";
+      const trimmed = present ? (raw as string).trim() : "";
+      return {
+        present,
+        length: present ? trimmed.length : null,
+        has0xPrefix: present ? trimmed.startsWith("0x") : null,
+        validShape: /^0x[0-9a-fA-F]{64}$/.test(trimmed) && !/^0x0{64}$/.test(trimmed),
+      };
+    };
     return {
-      present,
-      length: present ? trimmed.length : null,
-      has0xPrefix: present ? trimmed.startsWith("0x") : null,
-      validShape,
+      walletPrivateKey: shapeOf(process.env.WALLET_PRIVATE_KEY),
+      privateKey: shapeOf(process.env.PRIVATE_KEY),
       dataIntegrity: "DERIVED" as const,
     };
   });

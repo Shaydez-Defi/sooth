@@ -35,14 +35,14 @@ export async function buildServer(): Promise<ReturnType<typeof Fastify>> {
   // Debug: wallet-key presence/shape only - NEVER returns key material.
   // Checks both our WALLET_PRIVATE_KEY and the bot-kit's PRIVATE_KEY.
   fastify.get("/debug/wallet", async () => {
-    const shapeOf = (raw: string | undefined) => {
-      const present = typeof raw === "string" && raw.trim() !== "";
-      const trimmed = present ? (raw as string).trim() : "";
+    const shapeOf = (value: unknown) => {
+      const text = typeof value === "string" ? value.trim() : "";
+      const present = text !== "";
       return {
         present,
-        length: present ? trimmed.length : null,
-        has0xPrefix: present ? trimmed.startsWith("0x") : null,
-        validShape: /^0x[0-9a-fA-F]{64}$/.test(trimmed) && !/^0x0{64}$/.test(trimmed),
+        length: present ? text.length : null,
+        has0xPrefix: present ? text.startsWith("0x") : null,
+        validShape: /^0x[0-9a-fA-F]{64}$/.test(text) && !/^0x0{64}$/.test(text),
       };
     };
     return {

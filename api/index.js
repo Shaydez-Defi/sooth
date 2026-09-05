@@ -4336,6 +4336,19 @@ async function buildServer() {
   const fastify = Fastify({ logger: true });
   await fastify.register(cors, { origin: true });
   fastify.get("/health", async () => ({ status: "ok", dataIntegrity: "DERIVED", timestamp: (/* @__PURE__ */ new Date()).toISOString() }));
+  fastify.get("/debug/wallet", async () => {
+    const raw = process.env.WALLET_PRIVATE_KEY;
+    const present = typeof raw === "string" && raw.trim() !== "";
+    const trimmed = present ? raw.trim() : "";
+    const validShape = /^0x[0-9a-fA-F]{64}$/.test(trimmed) && !/^0x0{64}$/.test(trimmed);
+    return {
+      present,
+      length: present ? trimmed.length : null,
+      has0xPrefix: present ? trimmed.startsWith("0x") : null,
+      validShape,
+      dataIntegrity: "DERIVED"
+    };
+  });
   await registerMarketRoutes(fastify);
   await registerPositionRoutes(fastify);
   await registerOrderRoutes(fastify);

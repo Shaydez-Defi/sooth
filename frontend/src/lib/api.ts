@@ -33,9 +33,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   let res: Response;
   try {
+    // Content-Type only when a body exists: Fastify 400s on empty JSON bodies.
     res = await fetch(url, {
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       ...init,
+      headers: { ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}), ...(init?.headers ?? {}) },
     });
   } catch (err) {
     const apiLabel = API_BASE || "via vite proxy → http://localhost:3000";
